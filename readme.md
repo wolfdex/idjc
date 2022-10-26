@@ -1,8 +1,18 @@
 # Internet DJ Console
 
-this repo is an unoffical copy of SRC-Files from 
+this repo is an unoffical copy of IDJC from 
+
+http://idjc.sourceforge.net 
 
 https://idjc.sourceforge.io/index.html
+
+use it on your own risk
+
+
+## Documentation
+
+use Documentation from http://idjc.sourceforge.net 
+
 
 
 ## Source
