@@ -13,6 +13,11 @@ use it on your own risk
 
 use Documentation from http://idjc.sourceforge.net 
 
+## Versions
+
+tagged versions
+
+https://github.com/wolfdex/idjc/tags
 
 
 ## Source
