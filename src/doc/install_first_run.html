@@ -95,8 +95,9 @@ ui('Installation: First run', 'install-first-run-nav')
 
 <h4>The purpose of this page</h4>
 
-<p>Some system configuration needs to be done in order to be able to run IDJC. Fortunately it only needs
-to be done once and full details follow.</p>
+<p>In order to ensure the correct sound card or audio interface is used some user and or system wide configuration may need
+to be done but it only needs to be done once. It is likely that if the system just has onboard audio things will already work
+just fine but there is probably some scope for performance tuning.</p>
 
 <h4>Configuring your system for JACK Audio Connection Kit</h4>
 
@@ -126,23 +127,30 @@ After applying these changes, please re-login in order for them to take effect.
 You don't appear to have a sane system configuration. It is very likely that you
 encounter xruns. Please apply all the above mentioned changes and start jack again!</pre>
 
-<p>What just happened here is <i>jackd</i> just failed to start because it runs realtime mode by default
-and your system as it is configured won't supply it. Realtime mode helps to ensure that the small and
+<p>What just happened here is <i>jackd</i> just failed to start because it runs in realtime mode by default
+and the system as currently configured won't supply it. Realtime mode helps to ensure that the small and
 therefore low latency audio buffers are refilled without interruption. By choosing not to use realtime mode
 the buffer fills become more erratic making solid performance rely on using larger buffers that result in higher latency.</p>
 
+<p>This is an old example and <i>jackd</i> is more likely to start these days (perhaps under protest). In any event your mileage
+may vary and in the above case the information most likely only applies to non systemd Linux installations (most modern distributions
+use systemd so hopefully <i>jackd</i> would suggest something systemd specific or better yet perform the system changes quietly.</p>
+
 <h5>Let's get reconfiguring</h5>
+
+<p>Note that the following is just an example of what to do based on the example output above. Your mileage may vary.</p>
 
 <p>Add the line mentioned above to the file also mentioned above.</p>
 
 <ul>
-<li><p>Ubuntu</p><pre class="reduced">$ sudo su -c 'echo "@audio   -   rtprio   99" >> /etc/security/limits.conf'</pre></li>
-<li><p>Debian</p><pre class="reduced">$ su -c 'echo "@audio   -   rtprio   99" >> /etc/security/limits.conf'</pre></li>
+<li><pre class="reduced">$ sudo su -c 'echo "@audio   -   rtprio   99" >> /etc/security/limits.conf'</pre></li>
 </ul>
 
 <p>The above change applies only to members of the audio group. Ensure your user account is a member.</p>
 
-<pre>$ sudo usermod -a -G audio $(whoami)</pre>
+<ul>
+<li><pre class="reduced">$ sudo usermod -a -G audio $(whoami)</pre></li>
+</ul>
 
 <p>Log out of your desktop and log back in again for the new settings to take effect.</p>
 
@@ -169,15 +177,16 @@ ALSA: use 2 periods for playback</pre>
 
 <h5>Making a simple JACK configuration file</h5>
 
+<p>The configuration file will determine the operating parameters of an automatically started JACK sound server.</p>
+
 <pre>$ echo "/usr/bin/jackd -d alsa -r 44100 -p 256" > ~/.jackdrc</pre>
 
-<p>This will ensure that when <i>jackd</i> is started on demand that it will do so with a sample
-rate equalling that of CD audio and therefore most likely your entire music collection.</p>
+<p>In this example a sample rate of 44100 was selected matching the vast majority of digital music out there.</p>
 
 <h5>Making JACK use a particular sound card</h5>
 
 <p>It's a two step process of finding the names of all the sound cards and specifying
-which one to use to <i>jackd</i>.</p>
+which one to use.</p>
 
 <pre>$ cat /proc/asound/cards
  0 [Revolution71   ]: ICE1724 - M Audio Revolution-7.1
@@ -185,6 +194,14 @@ which one to use to <i>jackd</i>.</p>
  1 [nanoKONTROL    ]: USB-Audio - nanoKONTROL
                       KORG INC. nanoKONTROL at usb-0000:00:1d.0-2, full speed
 $ jackd -d alsa -d Revolution71 -r 44100 -p 256</pre>
+
+<p>If specifying the card name failed try using the number to the left prefaced by 'hw:' without the quotes.</p>
+<pre>
+$ jackd -d alsa -d hw:0 -r 44100 -p 256</pre>
+</pre>
+<p>Normally you would not need to specify hw:0 since it is the first sound device however you may have onboard
+audio disabled in the BIOS, at the driver level, or in ALSA itself resulting in card 0 not appearing in
+/proc/asound/cards.</p>
 
 <h5>Enabling MIDI events</h5>
 

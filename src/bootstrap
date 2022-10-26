@@ -11,7 +11,7 @@ check() {
 	done
 }
 
-check autoreconf libtool autopoint convert
+check autoreconf libtool autopoint convert make
 
 
 echo "remaking missing files in build environment"
@@ -23,8 +23,5 @@ if [ -d docsrc ]; then
   cd ..
 fi
 
-cd libshout-idjc
-autoreconf -ifs
-cd ..
 autoreconf -ifs
 

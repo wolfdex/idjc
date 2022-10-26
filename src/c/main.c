@@ -178,8 +178,14 @@ static int backend_main()
         fprintf(stderr, "pthread_mutex_init failed\n");
         exit(5);
         }
+#ifdef HAVE_AVCODEC_REGISTER_ALL
+    // kept for old ffmpeg compatibilty
     avcodec_register_all();
+#endif
+#ifdef HAVE_AV_REGISTER_ALL
+    // kept for old ffmpeg compatibility
     av_register_all();
+#endif
 #endif /* HAVE_LIBAV */
 
     alarm(3);

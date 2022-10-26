@@ -35,15 +35,15 @@ ChangeLog.gz: ChangeLog
 
 buildinfo:
 if GIT_VERSION_CONTROL
-	echo Commit hash: $$(git log -n1 "--pretty=format:%H") > buildinfo
-	echo Commit date: $$(git log -n1 "--pretty=format:%aD") >> buildinfo
-	echo Repo status: $$($(top_srcdir)/repostatus) >> buildinfo
-	echo Remote URL: $$(git config --get remote.origin.url) >> buildinfo
-	echo >> buildinfo
+	echo Commit hash: $$(git log -n1 "--pretty=format:%H") > $(top_builddir)/buildinfo
+	echo Commit date: $$(git log -n1 "--pretty=format:%aD") >> $(top_builddir)/buildinfo
+	echo Repo status: $$($(top_srcdir)/repostatus) >> $(top_builddir)/buildinfo
+	echo Remote URL: $$(git config --get remote.origin.url) >> $(top_builddir)/buildinfo
+	echo >> $(top_builddir)/buildinfo
 else
-	rm buildinfo
+	rm -f $(top_builddir)/buildinfo
 endif
-	echo Build date: $$(date -R) >> buildinfo
+	echo Build date: $$(date -R) >> $(top_builddir)/buildinfo
 
 clean-local:
 	rm -f buildinfo ChangeLog.gz README.gz NEWS.gz AUTHORS.gz ${PACKAGE_NAME}.desktop ${PACKAGE_NAME}.appdata.xml ${PACKAGE_NAME}

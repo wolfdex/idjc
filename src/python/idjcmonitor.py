@@ -1,11 +1,8 @@
-# idjcmonitor.py (C) 2013 Stephen Fairchild
+# idjcmonitor.py (C) 2013-2018 Stephen Fairchild
 # Released under the GNU Lesser General Public License version 2.0 (or
 # at your option, any later version).
 
-"""A monitoring class that keeps an eye on IDJC.
-
-It can be extended to issue e-mail alerts if IDJC freezes or perform Twitter
-updates when the music changes.
+"""A middleware facilitator for IDJC aimed towards station admin tasks.
 
 Requires IDJC 0.8.9 or higher.
 
@@ -16,7 +13,7 @@ import os
 import sys
 import time
 
-import gobject
+from gi.repository import GObject
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 
@@ -41,7 +38,7 @@ def pid_exists(pid):
         return True
 
 
-class IDJCMonitor(gobject.GObject):
+class IDJCMonitor(GObject.Object):
     """Monitor IDJC internals relating to a specific profile or session.
     
     Can yield information about streams, music metadata, health.
@@ -49,52 +46,65 @@ class IDJCMonitor(gobject.GObject):
     """
     
     __gsignals__ = {
-        'launch' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                                    (gobject.TYPE_STRING, gobject.TYPE_UINT)),
-        'quit' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                                    (gobject.TYPE_STRING, gobject.TYPE_UINT)),
-        'streamstate-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_INT, gobject.TYPE_BOOLEAN, gobject.TYPE_STRING)),
-        'recordstate-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_INT, gobject.TYPE_BOOLEAN, gobject.TYPE_STRING)),
-        'channelstate-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_UINT, gobject.TYPE_BOOLEAN)),
-        'voip-mode-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                                 (gobject.TYPE_UINT,)),
-        'metadata-changed' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                                                    (gobject.TYPE_STRING,) * 5),
-        'effect-started': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                           (gobject.TYPE_STRING,) * 2 + (gobject.TYPE_UINT,)),
-        'effect-stopped': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                           (gobject.TYPE_UINT,)),
-        'tracks-finishing': (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                            ()),
-        'frozen' : (gobject.SIGNAL_RUN_LAST, gobject.TYPE_NONE,
-                (gobject.TYPE_STRING, gobject.TYPE_UINT, gobject.TYPE_BOOLEAN))
+        'launch': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                    (GObject.TYPE_STRING, GObject.TYPE_UINT)),
+        'quit': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                  (GObject.TYPE_STRING, GObject.TYPE_UINT)),
+        'streamstate-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                                 (GObject.TYPE_INT, GObject.TYPE_BOOLEAN,
+                                  GObject.TYPE_STRING)),
+        'recordstate-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                                 (GObject.TYPE_INT, GObject.TYPE_BOOLEAN,
+                                  GObject.TYPE_STRING)),
+        'channelstate-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                                  (GObject.TYPE_UINT, GObject.TYPE_BOOLEAN)),
+        'voip-mode-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                               (GObject.TYPE_UINT,)),
+        'metadata-changed': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                              (GObject.TYPE_STRING,) * 5),
+        'effect-started': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                           (GObject.TYPE_STRING,) * 2 + (GObject.TYPE_UINT,)),
+        'effect-stopped': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                           (GObject.TYPE_UINT,)),
+        'player-started': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                           (GObject.TYPE_STRING,)),
+        'player-stopped': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                           (GObject.TYPE_STRING,)),
+        'tracks-finishing': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                             ()),
+        'announcement': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                          (GObject.TYPE_STRING,) * 3),
+        'frozen': (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+                    (GObject.TYPE_STRING, GObject.TYPE_UINT,
+                     GObject.TYPE_BOOLEAN))
     }
     
     __gproperties__ = {
-        'artist' : (gobject.TYPE_STRING, 'artist', 'artist from track metadata',
-                                                    "", gobject.PARAM_READABLE),
-        'title' : (gobject.TYPE_STRING, 'title', 'title from track metadata',
-                                                    "", gobject.PARAM_READABLE),
-        'album' : (gobject.TYPE_STRING, 'album', 'album from track metadata',
-                                                    "", gobject.PARAM_READABLE),
-        'songname' : (gobject.TYPE_STRING, 'songname',
-                            'the song name from metadata tags when available'
-                            ' and from the filenmame when not',
-                            "", gobject.PARAM_READABLE),
-        'music-filename' : (gobject.TYPE_STRING, 'music_filename',
-                            'the audio file pathname of the track',
-                            "", gobject.PARAM_READABLE),
-        'streaminfo' : (gobject.TYPE_PYOBJECT, 'streaminfo',
-                'information about the streams', gobject.PARAM_READABLE),
-        'recordinfo' : (gobject.TYPE_PYOBJECT, 'recordinfo',
-                'information about the recorders', gobject.PARAM_READABLE),
-        'channelinfo' : (gobject.TYPE_PYOBJECT, 'channelinfo',
-                'toggle state of the audio channels', gobject.PARAM_READABLE),
-        'voip-mode' : (gobject.TYPE_UINT, 'voip-mode', 'voice over ip mixer mode',
-                                                0, 2, 0, gobject.PARAM_READABLE)
+        'artist': (GObject.TYPE_STRING, 'artist', 'artist from track metadata',
+                   "", GObject.PARAM_READABLE),
+        'title': (GObject.TYPE_STRING, 'title', 'title from track metadata',
+                  "", GObject.PARAM_READABLE),
+        'album': (GObject.TYPE_STRING, 'album', 'album from track metadata',
+                  "", GObject.PARAM_READABLE),
+        'songname': (GObject.TYPE_STRING, 'songname',
+                     'the song name from metadata tags when available'
+                     ' and from the filenmame when not',
+                     "", GObject.PARAM_READABLE),
+        'music-filename': (GObject.TYPE_STRING, 'music_filename',
+                           'the audio file pathname of the track',
+                           "", GObject.PARAM_READABLE),
+        'streaminfo': (GObject.TYPE_PYOBJECT, 'streaminfo',
+                       'information about the streams',
+                       GObject.PARAM_READABLE),
+        'recordinfo': (GObject.TYPE_PYOBJECT, 'recordinfo',
+                       'information about the recorders',
+                       GObject.PARAM_READABLE),
+        'channelinfo': (GObject.TYPE_PYOBJECT, 'channelinfo',
+                        'toggle state of the audio channels',
+                        GObject.PARAM_READABLE),
+        'voip-mode': (GObject.TYPE_UINT, 'voip-mode',
+                      'voice over ip mixer mode', 0, 2, 0,
+                      GObject.PARAM_READABLE)
     }
     
     def __init__(self, profile):
@@ -103,7 +113,7 @@ class IDJCMonitor(gobject.GObject):
         Can also handle sessions with "session.sessionname"
         """
         
-        gobject.GObject.__init__(self)
+        GObject.GObject.__init__(self)
         self.__profile = profile
         self.__bus = dbus.SessionBus(mainloop=DBusGMainLoop())
         self.__bus_address = ".".join((BUS_BASENAME, profile))
@@ -151,25 +161,29 @@ class IDJCMonitor(gobject.GObject):
         self.__frozen = False
         self.__main = self.__output = self.__controls = None
         if not self.__shutdown:
-            self.__probe_id = gobject.timeout_add_seconds(
+            self.__probe_id = GObject.timeout_add_seconds(
                                                 2, self._idjc_started_probe)
 
     def _idjc_started_probe(self):
         # Check for a newly started IDJC instance of the correct profile.
         
-        bus_address = ".".join((BUS_BASENAME, self.__profile))
-        
+        def bgo(tail):
+            return self.__bus.get_object(self.__bus_address,
+                                         self.__base_objpath + tail)
         try:
-            self.__main = self.__bus.get_object(self.__bus_address,
-                                                self.__base_objpath + "/main")
-            self.__output = self.__bus.get_object(self.__bus_address,
-                                                self.__base_objpath + "/output")
-            self.__controls = self.__bus.get_object(self.__bus_address,
-                                            self.__base_objpath + "/controls")
+            self.__main = bgo("/main")
+            self.__output = bgo("/output")
+            self.__controls = bgo("/controls")
+            self.__player_left = bgo("/player/left")
+            self.__player_right = bgo("/player/right")
+            self.__player_interlude = bgo("/player/interlude")
+            self.__players = (self.__player_left, self.__player_right,
+                              self.__player_interlude)
 
             main_iface = dbus.Interface(self.__main, self.__base_interface)
             main_iface.pid(reply_handler=self._pid_reply_handler,
-                            error_handler=self._pid_error_handler)
+                           error_handler=self._pid_error_handler)
+
         except dbus.exceptions.DBusException:
             # Keep searching periodically.
             return not self.__shutdown
@@ -178,32 +192,31 @@ class IDJCMonitor(gobject.GObject):
 
     def _pid_reply_handler(self, value):
         self.__pid = value
+        
+        def cts(obj, signal, handler):
+            obj.connect_to_signal(signal, handler)
+
         try:
-            self.__main.connect_to_signal("track_metadata_changed",
-                                                        self._metadata_handler)
-            self.__main.connect_to_signal("effect_started",
-                                                self._effect_started_handler)
-            self.__main.connect_to_signal("effect_stopped",
-                                                self._effect_stopped_handler)
-            self.__main.connect_to_signal("quitting", self._quit_handler)
-            self.__main.connect_to_signal("heartbeat", self._heartbeat_handler)
-            self.__main.connect_to_signal("channelstate_changed",
-                                                    self._channelstate_handler)
-            self.__main.connect_to_signal("voip_mode_changed",
-                                                    self._voip_mode_handler)
-            self.__main.connect_to_signal("tracks_finishing",
-                                                self._tracks_finishing_handler)
-            self.__output.connect_to_signal("streamstate_changed",
-                                                    self._streamstate_handler)
-            self.__output.connect_to_signal("recordstate_changed",
-                                                    self._recordstate_handler)
+            cts(self.__main, "track_metadata_changed", self._metadata_handler)
+            cts(self.__main, "effect_started", self._effect_started_handler)
+            cts(self.__main, "effect_stopped", self._effect_stopped_handler)
+            cts(self.__main, "quitting", self._quit_handler)
+            cts(self.__main, "heartbeat", self._heartbeat_handler)
+            cts(self.__main, "channelstate_changed", self._channelstate_handler)
+            cts(self.__main, "voip_mode_changed", self._voip_mode_handler)
+            cts(self.__main, "tracks_finishing", self._tracks_finishing_handler)
+            cts(self.__output, "streamstate_changed", self._streamstate_handler)
+            cts(self.__output, "recordstate_changed", self._recordstate_handler)
+            for each in self.__players:
+                cts(each, "playing", self._playing_handler)
+                cts(each, "announcement", self._announcement_handler)
 
             # Start watchdog thread.
-            self.__watchdog_id = gobject.timeout_add_seconds(3, self._watchdog)
+            self.__watchdog_id = GObject.timeout_add_seconds(3, self._watchdog)
 
-            self.__streams = {n : (False, "unknown") for n in xrange(10)}
-            self.__recorders = {n : (False, "unknown") for n in xrange(4)}
-            self.__channels = [False] * 12
+            self.__streams = {n: (False, "unknown") for n in range(10)}
+            self.__recorders = {n: (False, "unknown") for n in range(4)}
+            self.__channels = [False]*12
             self.__voip_mode = 0
             main_iface = dbus.Interface(self.__main, self.__base_interface)
             output_iface = dbus.Interface(self.__output, self.__base_interface)
@@ -256,14 +269,13 @@ class IDJCMonitor(gobject.GObject):
         """Start scanning for a new bus object."""
 
         if self.__watchdog_id is not None:
-            gobject.source_remove(self.__watchdog_id)
+            GObject.source_remove(self.__watchdog_id)
             self.emit("quit", self.__profile, self.__pid)
         self._start_probing()
         
     def _streamstate_handler(self, numeric_id, connected, where):
         numeric_id = int(numeric_id)
         connected = bool(connected)
-        where = where.encode("utf-8")
         self.__streams[numeric_id] = (connected, where)
         self.notify("streaminfo")
         self.emit("streamstate-changed", numeric_id, connected, where)
@@ -271,7 +283,6 @@ class IDJCMonitor(gobject.GObject):
     def _recordstate_handler(self, numeric_id, recording, where):
         numeric_id = int(numeric_id)
         recording = bool(recording)
-        where = where.encode("utf-8")
         self.__recorders[numeric_id] = (recording, where)
         self.notify("recordinfo")
         self.emit("recordstate-changed", numeric_id, recording, where)
@@ -292,29 +303,36 @@ class IDJCMonitor(gobject.GObject):
     def _tracks_finishing_handler(self):
         self.emit("tracks-finishing")
 
-    def _metadata_handler(self, artist, title, album, songname, music_filename):
+    def _metadata_handler(self, *args):
+        # see definition of names below for 'args' specification.
 
         def update_property(name, value):
-            oldvalue = getattr(self, "_IDJCMonitor__" + name)
-            newvalue = value.encode("utf-8")
-            if newvalue != oldvalue:
-                setattr(self, "_IDJCMonitor__" + name, newvalue)
+            oldvalue = getattr(self, f"_IDJCMonitor__{name}")
+            if value != oldvalue:
+                setattr(self, f"_IDJCMonitor__{name}{value}")
                 self.notify(name)
 
-        for name, value in zip(
-                        "artist title album songname music_filename".split(),
-                            (artist, title, album, songname, music_filename)):
-            update_property(name, value)
+        names = "artist title album songname music_filename".split()
+        for name, arg in zip(names, args):
+            update_property(name, arg)
 
         self.emit("metadata-changed", self.__artist, self.__title,
-                                                self.__album, self.__songname,
-                                                self.__music_filename)
+                  self.__album, self.__songname, self.__music_filename)
 
     def _effect_started_handler(self, title, pathname, player):
         self.emit("effect-started", title, pathname, player)
 
     def _effect_stopped_handler(self, player):
         self.emit("effect-stopped", player)
+
+    def _playing_handler(self, name, state):
+        if state:
+            self.emit("player-started", name)
+        else:
+            self.emit("player-stopped", name)
+
+    def _announcement_handler(self, player, state, message):
+        self.emit("announcement", player, state, message)
 
     def do_get_property(self, prop):
         if self.__shutdown:
@@ -327,21 +345,20 @@ class IDJCMonitor(gobject.GObject):
                     "effect_pathname"):
             return getattr(self, "_IDJCMonitor__" + name)
         if name == "streaminfo":
-            return tuple(self.__streams[n] for n in xrange(10))
+            return tuple(self.__streams[n] for n in range(10))
         elif name == "recordinfo":
-            return tuple(self.__recorders[n] for n in xrange(4))
+            return tuple(self.__recorders[n] for n in range(4))
         elif name == "channelinfo":
-            return tuple(self.__channels[n] for n in xrange(12))
+            return tuple(self.__channels[n] for n in range(12))
         elif name == "voip-mode":
             return self.__voip_mode
         else:
-            raise AttributeError("Unknown property %s in %s" % (
-                                                            name, repr(self)))
+            raise AttributeError(f"Unknown property {name} in {self!r}")
 
     def notify(self, property_name):
         if not self.__shutdown:
-            gobject.GObject.notify(self, property_name)
+            GObject.Object.notify(self, property_name)
             
     def emit(self, *args, **kwargs):
         if not self.__shutdown:
-            gobject.GObject.emit(self, *args, **kwargs)
+            GObject.Object.emit(self, *args, **kwargs)

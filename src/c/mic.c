@@ -179,14 +179,13 @@ static void mic_process_stage4(struct mic *self)
     self->lmunpmdj = self->munpmdj * self->lgain;
     self->rmunpmdj = self->munpmdj * self->rgain;
 
-    self->aunp = self->unp * a;
-    self->aunpm = self->unpm * a;
-    self->aunpmdj = self->unpmdj * a;
     self->alrc = self->lrc * a;
     self->alc = self->lc * a;
     self->arc = self->rc * a;
     self->alcm = self->lcm * a;
     self->arcm = self->rcm * a;
+    self->alcmdj = self->alcm * host->djmute;
+    self->arcmdj = self->arcm * host->djmute;
     }
 
 float mic_process_all(struct mic **mics)

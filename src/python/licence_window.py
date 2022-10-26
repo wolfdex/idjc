@@ -19,12 +19,13 @@
 
 __all__ = ['LicenceWindow']
 
-import gtk
+import gi
+from gi.repository import Gtk
 
 from idjc import FGlobs
 
 
-class LicenceWindow(gtk.ScrolledWindow):
+class LicenceWindow(Gtk.ScrolledWindow):
     gpl_text = """                        GNU GENERAL PUBLIC LICENSE
                               Version 2, June 1991
 
@@ -363,26 +364,27 @@ This General Public License does not permit incorporating your program into
 proprietary programs.  If your program is a subroutine library, you may
 consider it more useful to permit linking proprietary applications with the
 library.  If this is what you want to do, use the GNU Lesser General
-Public License instead of this License.
-"""
+Public License instead of this License."""
+
 
     def cb_delete_window_event(self, widget, event):
         self.hide()
         return True
     def __init__(self):
-        gtk.ScrolledWindow.__init__(self)
-        self.set_policy(gtk.POLICY_NEVER, gtk.POLICY_ALWAYS)
-        self.set_shadow_type(gtk.SHADOW_ETCHED_IN)
-        text_view = gtk.TextView()
-        text_view.set_wrap_mode(gtk.WRAP_WORD)
+        Gtk.ScrolledWindow.__init__(self)
+        self.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
+        text_view = Gtk.TextView()
+        text_view.set_wrap_mode(Gtk.WrapMode.WORD)
         text_view.set_editable(False)
-        text_view.unset_flags(gtk.CAN_FOCUS)
+        text_view.set_can_focus(False)
+        text_view.set_top_margin(6)
         text_view.set_left_margin(8)
         text_view.set_right_margin(8)
+        text_view.set_bottom_margin(6)
         self.add(text_view)
-        text_buffer = gtk.TextBuffer()
+        text_buffer = Gtk.TextBuffer()
         tag = text_buffer.create_tag()
-        tag.set_property("font", "sans 8")
+        tag.set_property("font", "sans 8.5")
         text_buffer.insert_with_tags(text_buffer.get_start_iter(),
                                                             self.gpl_text, tag)
         text_view.set_buffer(text_buffer)

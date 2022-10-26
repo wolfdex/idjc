@@ -83,7 +83,6 @@ static unsigned vorbis_get_samplerate(struct oggdec_vars *self)  /* attempt to g
     void obtain_tag_info(char *name, char **target, int multiple)
         {
         int tags = vorbis_comment_query_count(&vc, name);
-        int size, i;
 
         if (tags == 0)
             {
@@ -100,8 +99,8 @@ static unsigned vorbis_get_samplerate(struct oggdec_vars *self)  /* attempt to g
         if (multiple)
             {
             /* calculate the space needed */
-            size = tags;
-            for (i = 0; i < tags; i++)
+            size_t size = (size_t)tags;
+            for (int i = 0; i < tags; i++)
                 size += strlen(vorbis_comment_query(&vc, name, i));
 
             if (!(*target = malloc(size)))
@@ -113,7 +112,7 @@ static unsigned vorbis_get_samplerate(struct oggdec_vars *self)  /* attempt to g
             *target[0] = '\0';
 
             /* collect a slash separated list of tags */
-            for (i = 0; i < tags; i++)
+            for (int i = 0; i < tags; i++)
                 {
                 strcat(*target, vorbis_comment_query(&vc, name, i));
                 if (i < tags - 1)
@@ -287,9 +286,14 @@ static void oggflac_metadata_callback(const FLAC__StreamDecoder *decoder, const 
     
     char *end(char *t)
         {
-        while (*t++ != '=');
-        while (isspace(*t) && t != '\0')
-            t++;
+        while (*t != '=') {
+            // consider possibility of a tag that does not have an '='
+            if (*t == '\0')
+                return t;
+            ++t;
+        }
+        // eliminate whitespace following '=' character
+        while (isspace(*(++t)));
         return t;
         }
 

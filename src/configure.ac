@@ -2,15 +2,16 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([idjc], [0.8.17], [http://idjc.sourceforge.net])
-AC_SUBST(COPYRIGHT_YEAR, [2017])
+AC_INIT([idjc], [0.9.0], [http://idjc.sourceforge.net])
+AC_SUBST(COPYRIGHT_YEAR, [2021])
 AC_CANONICAL_SYSTEM
 AC_CONFIG_SRCDIR([config.h.in])
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([config.h])
 
 # Generate python installation stuff
-AM_PATH_PYTHON([2.7])
+m4_define_default([_AM_PYTHON_INTERPRETER_LIST],[python3.8 python3.7 python3.9])
+AM_PATH_PYTHON([3.7])
 AC_SUBST([idjcpythondir], [\${pkglibdir}/site-packages])
 AC_SUBST([idjcpkgpythondir], [\${pkglibdir}/site-packages/idjc])
 
@@ -28,6 +29,7 @@ AM_GNU_GETTEXT_VERSION([0.18.1])
 PKG_CHECK_MODULES(LIBJACK, [jack >= 0.98.0])
 
 # Core dependencies.
+PKG_CHECK_MODULES([LIBOGG], [ogg])
 PKG_CHECK_MODULES([LIBVORBIS], [vorbis >= 1.0.0])
 PKG_CHECK_MODULES([LIBVORBISENC], [vorbisenc >= 1.0.0])
 PKG_CHECK_MODULES([LIBSAMPLERATE], [samplerate])
@@ -41,13 +43,12 @@ if test ${GIT_PROG_EXISTS} = "yes" ; then
     AC_MSG_CHECKING([for git repository in source tree root])
     if test $(git rev-parse --git-dir) = ".git" ; then
         AC_MSG_RESULT([yes])
-        git_repo = 1
+        AM_CONDITIONAL([GIT_VERSION_CONTROL],[true])
     else
         AC_MSG_RESULT([no])
+	AM_CONDITIONAL([GIT_VERSION_CONTROL],[false])
     fi
 fi
-AM_CONDITIONAL([GIT_VERSION_CONTROL], [test x$git_repo = x])
-
 
 AC_ARG_ENABLE([libav],
    AC_HELP_STRING([--disable-libav],[remove capability to decode m4a/wma/avi files]),[makelibav=$enableval],[makelibav="maybe"])
@@ -63,6 +64,7 @@ if test $makelibav != "no" ; then
             AC_CHECK_LIB([avcodec],[avcodec_decode_audio4], :, AC_MSG_ERROR("configure with --disable-libav or update ffmpeg/libav"))
             AC_CHECK_LIB([avcodec],[avcodec_send_packet], AC_DEFINE(HAVE_AVCODEC_SEND_PACKET, 1, [Set if avcodec_send_packet function exists]))
             AC_CHECK_LIB([avcodec],[avcodec_receive_packet], AC_DEFINE(HAVE_AVCODEC_RECEIVE_PACKET, 1, [Set if avcodec_receive_packet function exists]))
+            AC_CHECK_LIB([avcodec],[avcodec_register_all], AC_DEFINE(HAVE_AVCODEC_REGISTER_ALL, 1, [Set if function exists]))
             ],
             AC_SUBST(HAVE_AVCODEC, 0)
 
@@ -72,8 +74,9 @@ if test $makelibav != "no" ; then
                AC_MSG_WARN([IDJC will be built without wma/mp4/ape support])
             fi)
 
-   PKG_CHECK_MODULES([LIBAVFORMAT], [libavformat], AC_DEFINE(HAVE_AVFORMAT, 1, [Set if libavformat was found])
-            AC_SUBST(HAVE_AVFORMAT, 1),
+   PKG_CHECK_MODULES([LIBAVFORMAT], [libavformat], [AC_DEFINE(HAVE_AVFORMAT, 1, [Set if libavformat was found])
+            AC_SUBST(HAVE_AVFORMAT, 1)
+            AC_CHECK_LIB([avformat],[av_register_all], AC_DEFINE(HAVE_AV_REGISTER_ALL, 1, [Set if function exists]))],
             AC_SUBST(HAVE_AVFORMAT, 0)
 
             if test $makelibav = "yes" ; then
@@ -131,9 +134,6 @@ if test $makespeex != "no" ; then
 else
    AC_SUBST([HAVE_SPEEX],[0])
 fi
-
-# Used only to check the correct version is installed
-PKG_CHECK_MODULES([PYGTK], [pygtk-2.0 >= 2.6.0])
 
 AC_MSG_CHECKING([for mutagen])
 ${PYTHON} -c "import mutagen" >/dev/null 2>&1
@@ -292,7 +292,7 @@ AC_SUBST(EXT,[png])
 
 PKG_CHECK_MODULES([SHOUTIDJC], [shout-idjc])
 AC_CHECK_HEADERS([shoutidjc/shout.h])
-AC_CHECK_LIB([shout-idjc], [shout_set_meta], :, AC_MSG_ERROR([required function not detected]))
+AC_CHECK_LIB([shout-idjc], [shout_set_content_format], :, AC_MSG_ERROR([required function not detected]))
 AC_CHECK_LIB([shout-idjc], [shout_set_tls], AC_SUBST(HAVE_SHOUT_TLS, 1), AC_SUBST(HAVE_SHOUT_TLS, 0))
 
 if test x$DYNAMIC = "x1" ; then

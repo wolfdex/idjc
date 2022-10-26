@@ -94,6 +94,8 @@ static void write_frame(struct xlplayer *xlplayer, AVFrame *frame)
         av_opt_set_int(self->swr, "out_channel_layout", (self->channels == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO, 0);
         av_opt_set_sample_fmt(self->swr, "in_sample_fmt", self->c->sample_fmt, 0);
         av_opt_set_sample_fmt(self->swr, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
+        av_opt_set_int(self->swr, "in_sample_rate", self->c->sample_rate, 0);
+        av_opt_set_int(self->swr, "out_sample_rate", (int)xlplayer->samplerate, 0);
 
         if (swr_init(self->swr))
             {

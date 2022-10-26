@@ -1,7 +1,7 @@
 """Music database connectivity and display."""
 
-#   Copyright (C) 2012 Stephen Fairchild (s-fairchild@users.sourceforge.net)
-#             (C) 2012 Brian Millham (bmillham@users.sourceforge.net)
+#   Copyright (C) 2021 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#             (C) 2021 Brian Millham (bmillham@users.sourceforge.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -29,12 +29,22 @@ import json
 from functools import partial, wraps
 from collections import deque, defaultdict
 from contextlib import contextmanager
-from urllib import quote
+import colorsys
 
-import glib
-import gobject
-import pango
-import gtk
+import gi
+from gi.repository import GLib
+from gi.repository import GObject
+from gi.repository import Pango
+from gi.repository import Gtk
+from gi.repository import Gdk
+
+try:
+    import pymysql
+except ImportError:
+    pymysql = False # So we know what module was used.
+else:
+    pymysql.install_as_MySQLdb()
+
 try:
     import MySQLdb as sql
 except ImportError:
@@ -53,7 +63,7 @@ __all__ = ['MediaPane', 'have_songdb']
 AMPACHE = "Ampache"
 AMPACHE_3_7 = "Ampache 3.7"
 PROKYON_3 = "Prokyon 3"
-FUZZY, CLEAN, WHERE, DIRTY = xrange(4)
+FUZZY, CLEAN, WHERE, DIRTY = range(4)
 
 t = gettext.translation(FGlobs.package_name, FGlobs.localedir, fallback=True)
 _ = t.gettext
@@ -73,7 +83,7 @@ def basename(pathname):
 
 def thread_only(func):
     """Guard a method from being called from outside the thread context."""
-    
+
     @wraps(func)
     def inner(self, *args, **kwargs):
         assert threading.current_thread() == self
@@ -83,11 +93,11 @@ def thread_only(func):
 
 class DBAccessor(threading.Thread):
     """A class to hide the intricacies of database access.
-    
+
     When the database connection is dropped due to timeout it will silently 
     remake the connection and continue on with its work.
     """
-    
+
     def __init__(self, hostnameport, user, password, database, notify):
         """The notify function must lock gtk before accessing widgets."""
         
@@ -107,6 +117,12 @@ class DBAccessor(threading.Thread):
         self.notify = notify
         self._handle = None  # No connections made until there is a query.
         self._cursor = None
+        # Always enable setting charset to utf8
+        self.extra_args = {"charset": "utf8"}
+        # Use connection compression if module is capable
+        # ...could significantly aid data transfer speed
+        if not pymysql:
+            self.extra_args['compress'] = True
         self.jobs = deque()
         self.semaphore = threading.Semaphore()
         self.keepalive = True
@@ -120,7 +136,7 @@ class DBAccessor(threading.Thread):
             False, None: to run the handler
             True: to cancel the job
         """
-        
+
         self.jobs.append((sql_query, handler, failhandler))
         self.semaphore.release()
 
@@ -151,7 +167,15 @@ class DBAccessor(threading.Thread):
                             except sql.Error as e:
                                 if failhandler is not None:
                                     if failhandler(e, notify):
-                                        break
+                                        # TOREVIEW: There was a break here. For some reason that
+                                        # I haven't been able to find, with the break, you
+                                        # can't change catalogs, it never tries to reconnect to
+                                        # the database. The raise fixes that, but I'm unsure of
+                                        # any sideaffects from that. Also, when switching to
+                                        # the browse page, it shows 'Fetch Failed' while
+                                        # connecting to the database. Annoying, but other than
+                                        # that it works.
+                                        raise
                                     rows = 0
                                 else:
                                     raise e
@@ -182,8 +206,7 @@ class DBAccessor(threading.Thread):
                                     host=self.hostname, port=self.port,
                                     user=self.user, passwd=self.password,
                                     db=self.database, connect_timeout=6,
-                                    charset='utf8',
-                                    compress=True)
+                                    **self.extra_args)
                                 self._cursor = self._handle.cursor()
                             except sql.Error as e:
                                 notify(_("Connection failed (try %d)") %
@@ -305,22 +328,22 @@ class UseSettings(dict):
                 self.update(data)
 
 
-class Settings(gtk.Table):
+class Settings(Gtk.Table):
     """Connection details widgets."""
     
     def __init__(self, name):
         self._name = name
-        gtk.Table.__init__(self, 5, 4)
+        Gtk.Table.__init__(self, 5, 4)
         self.set_border_width(10)
         self.set_row_spacings(1)
-        for col, spc in zip(xrange(3), (3, 10, 3)):
+        for col, spc in zip(range(3), (3, 10, 3)):
             self.set_col_spacing(col, spc)
 
         self._controls = []
         self.textdict = {}
 
         # Attachment for labels.
-        l_attach = partial(self.attach, xoptions=gtk.SHRINK | gtk.FILL)
+        l_attach = partial(self.attach, xoptions=Gtk.AttachOptions.SHRINK | Gtk.AttachOptions.FILL)
         
         # Top row.
         hostportlabel, self.hostnameport = self._factory(
@@ -365,13 +388,13 @@ class Settings(gtk.Table):
     def _factory(self, labeltext, entrytext, control_name):
         """Widget factory method."""
 
-        label = gtk.Label(labeltext)
+        label = Gtk.Label(labeltext)
         label.set_alignment(1.0, 0.5)
 
         if entrytext:
             entry = DefaultEntry(entrytext, True)
         else:
-            entry = gtk.Entry()
+            entry = Gtk.Entry()
 
         entry.set_size_request(10, -1)
         self._controls.append(entry)
@@ -380,18 +403,18 @@ class Settings(gtk.Table):
         return label, entry
 
 
-class PrefsControls(gtk.Frame):
+class PrefsControls(Gtk.Frame):
     """Database controls as visible in the preferences window."""
     
     def __init__(self):
-        gtk.Frame.__init__(self)
+        Gtk.Frame.__init__(self)
         self.set_border_width(3)
-        label = gtk.Label(" %s " % 
+        label = Gtk.Label(" %s " % 
                             _('Prokyon3 or Ampache (song title) Database'))
         set_tip(label, _('You can make certain media databases accessible in '
                             'IDJC for easy drag and drop into the playlists.'))
         self.set_label_widget(label)
-        vbox = gtk.VBox()
+        vbox = Gtk.VBox()
         vbox.set_border_width(6)
         vbox.set_spacing(2)
         self.add(vbox)
@@ -404,30 +427,29 @@ class PrefsControls(gtk.Frame):
         for i in range(1, 5):
             settings = Settings(str(i))
             self._settings.append(settings)
-            label = gtk.Label(str(i))
+            label = Gtk.Label(str(i))
             self._notebook.append_page(settings, label)
 
-        self.dbtoggle = gtk.ToggleButton(_('Music Database'))
+        self.dbtoggle = Gtk.ToggleButton(_('Music Database'))
         self.dbtoggle.connect("toggled", self._cb_dbtoggle)
 
-        hbox = gtk.HBox()
+        hbox = Gtk.HBox()
         hbox.set_spacing(2)
         
-        self._disconnect = gtk.Button()
+        self._disconnect = Gtk.Button()
         self._disconnect.set_sensitive(False)
-        image = gtk.image_new_from_stock(gtk.STOCK_DISCONNECT, gtk.ICON_SIZE_MENU)
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_DISCONNECT, Gtk.IconSize.MENU)
         self._disconnect.add(image)
         self._disconnect.connect("clicked", lambda w: self.dbtoggle.set_active(False))
         hbox.pack_start(self._disconnect, False)
         
-        self._connect = gtk.Button()
-        image = gtk.image_new_from_stock(gtk.STOCK_CONNECT, gtk.ICON_SIZE_MENU)
+        self._connect = Gtk.Button()
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_CONNECT, Gtk.IconSize.MENU)
         self._connect.add(image)
         self._connect.connect("clicked", lambda w: self.dbtoggle.set_active(True))
         hbox.pack_start(self._connect, False)
         
-        self._statusbar = gtk.Statusbar()
-        self._statusbar.set_has_resize_grip(False)
+        self._statusbar = Gtk.Statusbar()
         cid = self._statusbar.get_context_id("all output")
         self._statusbar.push(cid, _('Disconnected'))
         hbox.pack_start(self._statusbar)
@@ -436,7 +458,7 @@ class PrefsControls(gtk.Frame):
             vbox.pack_start(hbox, False)
         else:
             vbox.set_sensitive(False)
-            label = gtk.Label(_('Module mysql-python (MySQLdb) required'))
+            label = Gtk.Label(_('Module mysql-python (MySQLdb) required'))
             vbox.add(label)
 
         self.show_all()
@@ -514,21 +536,21 @@ class PrefsControls(gtk.Frame):
         self._statusbar.set_tooltip_text(message)
 
 
-class PageCommon(gtk.VBox):
+class PageCommon(Gtk.VBox):
     """Base class for all pages."""
     
     def __init__(self, notebook, label_text, controls):
-        gtk.VBox.__init__(self)
+        Gtk.VBox.__init__(self)
         self.set_spacing(2)
-        self.scrolled_window = gtk.ScrolledWindow()
-        self.scrolled_window.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_ALWAYS)
+        self.scrolled_window = Gtk.ScrolledWindow()
+        self.scrolled_window.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.ALWAYS)
         self.pack_start(self.scrolled_window)
-        self.tree_view = gtk.TreeView()
+        self.tree_view = Gtk.TreeView()
         self.tree_view.set_enable_search(False)
         self.tree_selection = self.tree_view.get_selection()
         self.scrolled_window.add(self.tree_view)
         self.pack_start(controls, False)
-        label = gtk.Label(label_text)
+        label = Gtk.Label(label_text)
         notebook.append_page(self, label)
         self._update_id = deque()
         self._acc = None
@@ -572,7 +594,7 @@ class PageCommon(gtk.VBox):
             model.clear()
             
     def repair_focusability(self):
-        self.tree_view.set_flags(gtk.CAN_FOCUS)
+        self.tree_view.set_can_focus(True)
 
     @staticmethod
     def _make_tv_columns(tree_view, parameters):
@@ -585,12 +607,12 @@ class PageCommon(gtk.VBox):
                 label, data_index, data_function, mw, el, renderer = p
             except:
                 label, data_index, data_function, mw, el = p
-                renderer = gtk.CellRendererText()
+                renderer = Gtk.CellRendererText()
                 renderer.props.ellipsize = el
-            column = gtk.TreeViewColumn(label, renderer)
+            column = Gtk.TreeViewColumn(label, renderer)
+            column.set_resizable(True)
+            column.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
             if mw != -1:
-                column.set_resizable(True)
-                column.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
                 column.set_min_width(mw)
                 column.set_fixed_width(mw + 50)
             tree_view.append_column(column)
@@ -634,8 +656,8 @@ class ViewerCommon(PageCommon):
         self.notebook = notebook
         self._reload_upon_catalogs_changed(enable_notebook_reload=True)
         PageCommon.__init__(self, notebook, label_text, controls)
-        self.tree_view.enable_model_drag_source(gtk.gdk.BUTTON1_MASK,
-            self._sourcetargets, gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_COPY)
+        self.tree_view.enable_model_drag_source(Gdk.ModifierType.BUTTON1_MASK,
+            self._sourcetargets, Gdk.DragAction.DEFAULT | Gdk.DragAction.COPY)
         self.tree_view.connect_after("drag-begin", self._cb_drag_begin)
         self.tree_view.connect("drag-data-get", self._cb_drag_data_get)
 
@@ -648,7 +670,7 @@ class ViewerCommon(PageCommon):
         handler_id.append(self.catalogs.connect("changed",
             self._on_catalogs_changed, enable_notebook_reload, handler_id))
         self._old_cat_data = None
-
+        
     def _on_catalogs_changed(self, widget, enable_notebook_reload, handler_id):
         self.catalogs.disconnect(handler_id[0])  # Only run once.
         if enable_notebook_reload:
@@ -667,7 +689,8 @@ class ViewerCommon(PageCommon):
     def _cb_drag_begin(self, widget, context):
         """Set icon for drag and drop operation."""
 
-        context.set_icon_stock(gtk.STOCK_CDROM, -5, -5)
+        #context.set_icon_stock(Gtk.STOCK_CDROM, -5, -5) ## TOFIX
+        pass
 
     def _cb_drag_data_get(self, tree_view, context, selection, target, etime):
         model, paths = self.tree_selection.get_selected_rows()
@@ -675,30 +698,30 @@ class ViewerCommon(PageCommon):
         for catalog, pathname in self._drag_data(model, paths):
             valid, pathname = self.catalogs.transform_path(catalog, pathname)
             if valid:
-                data.append("file://" + pathname)
-        selection.set(selection.target, 8, "\n".join(data))
+                data.append(b"file://" + pathname.encode('utf-8'))
+        selection.set(selection.get_target(), 8, b"\n".join(data))
 
     def _cond_cell_secs_to_h_m_s(self, column, renderer, model, iter, cell):
         if model.get_value(iter, 0) >= 0:
             return self._cell_secs_to_h_m_s(column, renderer, model, iter, cell)
         else:
-            renderer.set_property("text", "")
+            renderer.props.text = ""
     
     def _cell_k(self, column, renderer, model, iter, cell):
         bitrate = model.get_value(iter, cell)
         if bitrate == 0:
-            renderer.set_property("text", "")
+            renderer.props.text = ""
         elif self._db_type == "P3":
-            renderer.set_property("text", "%dk" % bitrate)
+            renderer.props.text = f"{bitrate}k"
         elif bitrate > 9999 and self._db_type in (AMPACHE, AMPACHE_3_7):
-            renderer.set_property("text", "%dk" % (bitrate // 1000))
-        renderer.set_property("xalign", 1.0)
+            renderer.props.text = f"{bitrate // 1000}k"
+        renderer.props.xalign = 1.0
 
     def _query_cook_common(self, query):
         if self._db_type == AMPACHE:
             query = query.replace("__played_by_me__", "'1' as played_by_me")
         else:
-            query = query.replace("__played_by_me__", """SUBSTR(MAX(CONCAT(object_count.date, IF(ISNULL(agent), NULL,
+            query = query.replace("__played_by_me__", """SUBSTR(MAX(CONCAT(object_count.date, IF(ISNULL(agent), 0,
                         IF(STRCMP(LEFT(agent,5), "IDJC:"), 2,
                         IF(STRCMP(agent, "IDJC:1"), 0, 1))))), 11) AS played_by_me""")
         return query.replace("__catalogs__", self.catalogs.sql())
@@ -706,9 +729,9 @@ class ViewerCommon(PageCommon):
     def _cell_show_unknown(self, column, renderer, model, iter, data):
         text, max_lastplay_date, played_by, played, played_by_me, cat = model.get(iter, *data)
         if text is None: text = _('<unknown>')
-        weight = pango.WEIGHT_NORMAL
+        weight = Pango.Weight.NORMAL
         if not played:
-            col = 'black'
+            col = Gdk.RGBA(0, 0, 0)
             renderer.props.background_set = False
         else:
             value, percent, weight = self._get_played_percent(cat, max_lastplay_date)
@@ -716,24 +739,24 @@ class ViewerCommon(PageCommon):
             renderer.props.background_set = True
             renderer.props.background = bg_col
         renderer.props.text = text
-        renderer.props.foreground = col
+        renderer.props.foreground_rgba = col
         renderer.props.weight = weight
 
     def _cell_show_nested(self, column, renderer, model, iter, data):
         text, max_lastplay_date, played_by, played, played_by_me, cat = model.get(iter, *data)
         if text is None: text = _('<unknown>')
-        col = "black"
-        weight = pango.WEIGHT_NORMAL
+        col = Gdk.RGBA(0, 0, 0)
+        weight = Pango.Weight.NORMAL
         renderer.props.background_set = False
         if model.iter_depth(iter) == 0:
-            col = "red"
+            col = Gdk.RGBA(1, 0, 0)
         elif played:
             value, percent, weight = self._get_played_percent(cat, max_lastplay_date)
             col, bg_col = ViewerCommon._set_color(played_by_me, percent)
             renderer.props.background_set = True
             renderer.props.background = bg_col
         renderer.props.text = text
-        renderer.props.foreground = col
+        renderer.props.foreground_rgba = col
         renderer.props.weight = weight
 
     def _cell_progress(self, column, renderer, model, iter, data):
@@ -775,23 +798,23 @@ class ViewerCommon(PageCommon):
         v_in = model.get_value(iter, cell)
         d, h, m, s = ViewerCommon._secs_to_h_m_s(v_in)
         if d:
-            v_out = "%dd:%02d:%02d" % (d, h, m)
+            v_out = f"{d}d:{h:02d}:{m:02d}"
         else:
             if h:
-                v_out = "%d:%02d:%02d" % (h, m, s)
+                v_out = f"{h}:{m:02d}:{s:02d}"
             else:
-                v_out = "%d:%02d" % (m, s)
-        renderer.set_property("xalign", 1.0)
-        renderer.set_property("text", v_out)
+                v_out = f"{m}:{s:02d}"
+        renderer.props.xalign = 1.0
+        renderer.props.text = v_out
         
     @staticmethod
     def _cell_ralign(column, renderer, model, iter, cell):
-        val = model.get_value(iter, cell)
-        if val:
-            renderer.set_property("xalign", 1.0)
-            renderer.set_property("text", val)
+        data = model.get_value(iter, cell)
+        if data:
+            renderer.props.xalign = 1.0
+            renderer.props.text = str(data)
         else:
-            renderer.set_property("text", "")
+            renderer.props.text = ""
 
     @staticmethod
     def _secs_to_h_m_s(value):
@@ -806,18 +829,18 @@ class ViewerCommon(PageCommon):
             return _("<unknown>") + " "
         difftime = time.time() - int(value)
         d, h, m, s = ViewerCommon._secs_to_h_m_s(difftime)
-        return "%dd %dh %dm ago " % (d, h, m)
+        return f"{d:.0f}d {h:.0f}h {m:.0f}m ago "
 
     def _get_played_percent(self, catalog, value):
         if value is None:
-            return 0, 0.0, pango.WEIGHT_NORMAL + 50
+            return 0, 0.0, Pango.Weight.NORMAL + 50
         now = time.time()
         max_days_ago = self.catalogs.lpscale(catalog)
         diff = now - int(value)
         if diff > max_days_ago:
             value = 0
             percent = 0.35
-            weight = pango.WEIGHT_NORMAL + 100
+            weight = Pango.Weight.NORMAL + 100
         else:
             percent = 1.0 - (float(diff) / float(max_days_ago))
             value = 100 * percent
@@ -825,28 +848,31 @@ class ViewerCommon(PageCommon):
             # below about .35 starts to look to much like black.
             percent = (percent * .6) + .4
             # Get a weight from 500 to 900
-            weight = ((percent * .4) * 1000) + pango.WEIGHT_NORMAL + 100
+            weight = ((percent * .4) * 1000) + Pango.Weight.NORMAL + 100
         return value, percent, weight
 
     @staticmethod
     def _set_color(text, percent=1.0):
-        #print("text: ", text)
+        try:
+            text = int(text)
+        except TypeError:
+            text = 0
         if percent == 1.0:
             bg_col = "white"
-        elif int(text) == 1:
+        elif text == 1:
             bg_col = "Powder Blue"
         else:
             bg_col = "Light Pink"
-        return (gtk.gdk.color_from_hsv(0.0, 1.0, percent),
-                gtk.gdk.color_from_hsv(0.6666, 1.0, percent),
-                gtk.gdk.color_from_hsv(0.3333, 1.0, percent))[int(text)], bg_col
+        return (Gdk.RGBA(*colorsys.hsv_to_rgb(0.0, 1.0, percent)),
+                Gdk.RGBA(*colorsys.hsv_to_rgb(0.6666, 1.0, percent)),
+                Gdk.RGBA(*colorsys.hsv_to_rgb(0.3333, 1.0, percent)))[text], bg_col
 
-class ExpandAllButton(gtk.Button):
+class ExpandAllButton(Gtk.Button):
     def __init__(self, expanded, tooltip=None):
-        expander = gtk.Expander()
+        expander = Gtk.Expander()
         expander.set_expanded(expanded)
         expander.show_all()
-        gtk.Button.__init__(self)
+        Gtk.Button.__init__(self)
         self.add(expander)
         if tooltip is not None:
             set_tip(self, tooltip)
@@ -862,28 +888,29 @@ class TreePage(ViewerCommon):
     # The order chosen negates the need for a custom sort comparison function.
     DATA_SIGNATURE = int, str, str, str, int,\
                      int, int, int, str, str, str, str,\
-                     int, int, int, str, str, int, str
+                     int, int, int, int, str, int, str
     BLANK_ROW = tuple(x() for x in DATA_SIGNATURE[2:])
 
     def __init__(self, notebook, catalogs):
-        self.controls = gtk.HBox()
-        layout_store = gtk.ListStore(str, gtk.TreeStore, gobject.TYPE_PYOBJECT)
-        self.layout_combo = gtk.ComboBox(layout_store)
-        cell_text = gtk.CellRendererText()
-        self.layout_combo.pack_start(cell_text)
+        self.controls = Gtk.HBox()
+        layout_store = Gtk.ListStore(str, Gtk.TreeStore, GObject.TYPE_PYOBJECT)
+        self.layout_combo = Gtk.ComboBox()
+        self.layout_combo.set_model(layout_store)
+        cell_text = Gtk.CellRendererText()
+        self.layout_combo.pack_start(cell_text, True)
         self.layout_combo.add_attribute(cell_text, "text", 0)
         self.controls.pack_start(self.layout_combo, False)
-        self.right_controls = gtk.HBox()
+        self.right_controls = Gtk.HBox()
         self.right_controls.set_spacing(1)
-        self.tree_rebuild = gtk.Button()
+        self.tree_rebuild = Gtk.Button()
         set_tip(self.tree_rebuild, _('Reload the database.'))
-        image = gtk.image_new_from_stock(gtk.STOCK_REFRESH, gtk.ICON_SIZE_MENU)
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_REFRESH, Gtk.IconSize.MENU)
         self.tree_rebuild.add(image)
         self.tree_rebuild.connect("clicked", self._cb_tree_rebuild)
         self.tree_rebuild.set_use_stock(True)
         tree_expand = ExpandAllButton(True, _('Expand entire tree.'))
         tree_collapse = ExpandAllButton(False, _('Collapse tree.'))
-        sg = gtk.SizeGroup(gtk.SIZE_GROUP_HORIZONTAL)
+        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
         for each in (self.tree_rebuild, tree_expand, tree_collapse):
             self.right_controls.pack_start(each, False)
             sg.add_widget(each)
@@ -893,41 +920,41 @@ class TreePage(ViewerCommon):
                                                                     catalogs)
         
         self.tree_view.set_enable_tree_lines(True)
-        tree_expand.connect_object("clicked", gtk.TreeView.expand_all,
+        tree_expand.connect_object("clicked", Gtk.TreeView.expand_all,
                                                                 self.tree_view)
-        tree_collapse.connect_object("clicked", gtk.TreeView.collapse_all,
+        tree_collapse.connect_object("clicked", Gtk.TreeView.collapse_all,
                                                                 self.tree_view)
         self.tree_cols = self._make_tv_columns(self.tree_view, (
-                ("", (1, 15, 16, 17, 18, 14), self._cell_show_nested, 180, pango.ELLIPSIZE_END),
+                ("", (1, 15, 16, 17, 18, 14), self._cell_show_nested, 180, Pango.EllipsizeMode.END),
                 # TC: Track artist.
-                (_('Artist'), (10, 9), self._data_merge, 100, pango.ELLIPSIZE_END),
+                (_('Artist'), (10, 9), self._data_merge, 100, Pango.EllipsizeMode.END),
                 # TC: The disk number of the album track.
-                (_('Disk'), 5, self._cell_ralign, -1, pango.ELLIPSIZE_NONE),
+                (_('Disk'), 5, self._cell_ralign, -1, Pango.EllipsizeMode.NONE),
                 # TC: The album track number.
-                (_('Track'), 7, self._cell_ralign, -1, pango.ELLIPSIZE_NONE),
+                (_('Track'), 7, self._cell_ralign, -1, Pango.EllipsizeMode.NONE),
                 # TC: Track playback time.
-                (_('Duration'), 13, self._cond_cell_secs_to_h_m_s, -1, pango.ELLIPSIZE_NONE),
-                (_('Last Played'), (15, 16, 17, 14), self._cell_progress, -1, None, gtk.CellRendererProgress()),
-                (_('Bitrate'), 12, self._cell_k, -1, pango.ELLIPSIZE_NONE),
-                (_('Filename'), (14, 11), self._cell_filename, 100, pango.ELLIPSIZE_END),
+                (_('Duration'), 13, self._cond_cell_secs_to_h_m_s, -1, Pango.EllipsizeMode.NONE),
+                (_('Last Played'), (15, 16, 17, 14), self._cell_progress, -1, None, Gtk.CellRendererProgress()),
+                (_('Bit Rate'), 12, self._cell_k, -1, Pango.EllipsizeMode.NONE),
+                (_('Filename'), (14, 11), self._cell_filename, 100, Pango.EllipsizeMode.END),
                 # TC: Directory path to a file.
-                (_('Path'), (14, 11), self._cell_path, -1, pango.ELLIPSIZE_NONE),
+                (_('Path'), (14, 11), self._cell_path, -1, Pango.EllipsizeMode.NONE),
                 ))
 
-        self.artist_store = gtk.TreeStore(*self.DATA_SIGNATURE)
-        self.album_store = gtk.TreeStore(*self.DATA_SIGNATURE)
+        self.artist_store = Gtk.TreeStore(*self.DATA_SIGNATURE)
+        self.album_store = Gtk.TreeStore(*self.DATA_SIGNATURE)
         layout_store.append((_('Artist - Album - Title'), self.artist_store, (1, )))
         layout_store.append((_('Album - [Disk] - Title'), self.album_store, (2, )))
         self.layout_combo.set_active(0)
         self.layout_combo.connect("changed", self._cb_layout_combo)
 
-        self.loading_vbox = gtk.VBox()
+        self.loading_vbox = Gtk.VBox()
         self.loading_vbox.set_border_width(20)
         self.loading_vbox.set_spacing(20)
         # TC: The database tree view is being built (populated).
-        self.loading_label = gtk.Label()
+        self.loading_label = Gtk.Label()
         self.loading_vbox.pack_start(self.loading_label, False)
-        self.progress_bar = gtk.ProgressBar()
+        self.progress_bar = Gtk.ProgressBar()
         self.loading_vbox.pack_start(self.progress_bar, False)
         self.pack_start(self.loading_vbox)
         self._pulse_id = deque()
@@ -1004,21 +1031,21 @@ class TreePage(ViewerCommon):
         elif self._db_type in (AMPACHE, AMPACHE_3_7):
             query = """SELECT
                     album.name as album,
-                    album.prefix as alb_prefix,
+                    IFNULL(album.prefix, "") as alb_prefix,
                     album.year as year,
                     album.disk as disk,
                     song.album as album_id,
-                    track as tracknumber,
+                    IFNULL(track, 0) as tracknumber,
                     title,
                     artist.name as artist,
-                    artist.prefix as art_prefix,
+                    IFNULL(artist.prefix, "") as art_prefix,
                     file,
-                    bitrate,
-                    time as length,
+                    IFNULL(bitrate, 0),
+                    IFNULL(time, 0) as length,
                     catalog.id as catalog_id,
                     MAX(object_count.date) as max_date_played,
                     SUBSTR(MAX(CONCAT(object_count.date, user.fullname)), 11) AS played_by,
-                    played,
+                    IFNULL(played, 0),
                     __played_by_me__
                     FROM song
                     LEFT JOIN artist ON song.artist = artist.id
@@ -1080,8 +1107,6 @@ class TreePage(ViewerCommon):
         if isinstance(exception, sql.InterfaceError):
             raise exception  # Recover.
         
-        print(exception)
-        
         notify(_('Tree fetch failed'))
         idle_add(threadslock(self.loading_label.set_text), _('Fetch Failed!'))
         while self._pulse_id:
@@ -1107,7 +1132,7 @@ class TreePage(ViewerCommon):
         self.album_store.clear()
 
         namespace = [False, (0.0, None, None, None, {}, None, None, None, None)]
-        do_max = min(max(30, rows / 100), 200)  # Data size to process.
+        do_max = int(min(max(30, rows / 100), 200))  # Data size to process.
         total = 2.0 * rows
         context = idle_add(self._update_2, acc, cursor, total, do_max,
                                                             [], namespace)
@@ -1139,7 +1164,7 @@ class TreePage(ViewerCommon):
 
             l_append(row)
             try:
-                art_letter = row[7].decode('utf-8')[0].upper()
+                art_letter = row[7][0].upper()
             except IndexError:
                 art_letter = ""
 
@@ -1184,7 +1209,7 @@ class TreePage(ViewerCommon):
         BLANK_ROW = self.BLANK_ROW
         if letter is None: letter = {}
         
-        for each in xrange(do_max):
+        for each in range(do_max):
             if acc.keepalive == False:
                 return False
                 
@@ -1195,7 +1220,7 @@ class TreePage(ViewerCommon):
                 return False
 
             try:
-                alb_letter = row[0].decode('utf-8')[0].upper()
+                alb_letter = row[0][0].upper()
             except IndexError:
                 alb_letter = ""
         
@@ -1213,7 +1238,7 @@ class TreePage(ViewerCommon):
                     year = row[2]
                     disk = None
                     if year:
-                        albumtext = "%s (%d)" % (self._join(alb_prefix, album), year)
+                        albumtext = f"{self._join(alb_prefix, album)} ({year})"
                     else:
                         albumtext = album
                     iter_1 = append(iter_l, (-2, albumtext) + BLANK_ROW)
@@ -1241,35 +1266,36 @@ class FlatPage(ViewerCommon):
         self.transfrom = self.db_accessor = None
 
         # TC: User specified search filter entry box title text.
-        self.controls = gtk.Frame(" %s " % _('Filters'))
-        self.controls.set_shadow_type(gtk.SHADOW_OUT)
+        self.controls = Gtk.Frame()
+        self.controls.set_label(" %s " % _('Filters'))
+        self.controls.set_shadow_type(Gtk.ShadowType.OUT)
         self.controls.set_border_width(1)
         self.controls.set_label_align(0.5, 0.5)
-        filter_vbox = gtk.VBox()
+        filter_vbox = Gtk.VBox()
         filter_vbox.set_border_width(3)
         filter_vbox.set_spacing(1)
         self.controls.add(filter_vbox)
         
-        fuzzy_hbox = gtk.HBox()
+        fuzzy_hbox = Gtk.HBox()
         filter_vbox.pack_start(fuzzy_hbox, False)
         # TC: A type of search on any data field matching paritial strings.
-        fuzzy_label = gtk.Label(_('Fuzzy Search'))
+        fuzzy_label = Gtk.Label(_('Fuzzy Search'))
         fuzzy_hbox.pack_start(fuzzy_label, False)
-        self.fuzzy_entry = gtk.Entry()
+        self.fuzzy_entry = Gtk.Entry()
         self.fuzzy_entry.connect("changed", self._cb_fuzzysearch_changed)
         fuzzy_hbox.pack_start(self.fuzzy_entry, True, True, 0)
         
-        where_hbox = gtk.HBox()
+        where_hbox = Gtk.HBox()
         filter_vbox.pack_start(where_hbox, False)
         # TC: WHERE is an SQL keyword.
-        where_label = gtk.Label(_('WHERE'))
+        where_label = Gtk.Label(_('WHERE'))
         where_hbox.pack_start(where_label, False)
-        self.where_entry = gtk.Entry()
+        self.where_entry = Gtk.Entry()
         self.where_entry.connect("activate", self._cb_update)
         where_hbox.pack_start(self.where_entry)
-        image = gtk.image_new_from_stock(gtk.STOCK_EXECUTE,
-                                                        gtk.ICON_SIZE_BUTTON)
-        self.update_button = gtk.Button()
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_EXECUTE,
+                                                        Gtk.IconSize.BUTTON)
+        self.update_button = Gtk.Button()
         self.update_button.connect("clicked", self._cb_update)
         self.update_button.set_image(image)
         image.show
@@ -1282,27 +1308,27 @@ class FlatPage(ViewerCommon):
         # index(0), ARTIST(1), ALBUM(2), TRACKNUM(3), TITLE(4), DURATION(5), BITRATE(6),
         # pathname(7), disk(8), catalog_id(9), max_date_played(10),
         # played_by(11), played(12), played_by_me(13)
-        self.list_store = gtk.ListStore(
+        self.list_store = Gtk.ListStore(
                             int, str, str, int, str, int, int,
-                            str, int, int, str,
+                            str, int, int, int,
                             str, int, str)
         self.tree_cols = self._make_tv_columns(self.tree_view, (
-            ("(0)", 0, self._cell_ralign, -1, pango.ELLIPSIZE_NONE),
-            (_('Artist'), (1, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, pango.ELLIPSIZE_END),
-            (_('Album'), (2, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, pango.ELLIPSIZE_END),
-            (_('Title'), (4, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, pango.ELLIPSIZE_END),
-            (_('Last Played'), (10, 11, 12, 9), self._cell_progress, -1, None, gtk.CellRendererProgress()),
-            (_('Disk'), 8, self._cell_ralign, -1, pango.ELLIPSIZE_NONE),
-            (_('Track'), 3, self._cell_ralign, -1, pango.ELLIPSIZE_NONE),
-            (_('Duration'), 5, self._cell_secs_to_h_m_s, -1, pango.ELLIPSIZE_NONE),
-            (_('Bitrate'), 6, self._cell_k, -1, pango.ELLIPSIZE_NONE),
-            (_('Filename'), (9, 7), self._cell_filename, 100, pango.ELLIPSIZE_END),
-            (_('Path'), (9, 7), self._cell_path, -1, pango.ELLIPSIZE_NONE),
+            ("(0)", 0, self._cell_ralign, -1, Pango.EllipsizeMode.NONE),
+            (_('Artist'), (1, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, Pango.EllipsizeMode.END),
+            (_('Album'), (2, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, Pango.EllipsizeMode.END),
+            (_('Title'), (4, 10, 11, 12, 13, 9), self._cell_show_unknown, 100, Pango.EllipsizeMode.END),
+            (_('Last Played'), (10, 11, 12, 9), self._cell_progress, -1, None, Gtk.CellRendererProgress()),
+            (_('Disk'), 8, self._cell_ralign, -1, Pango.EllipsizeMode.NONE),
+            (_('Track'), 3, self._cell_ralign, -1, Pango.EllipsizeMode.NONE),
+            (_('Duration'), 5, self._cell_secs_to_h_m_s, -1, Pango.EllipsizeMode.NONE),
+            (_('Bit Rate'), 6, self._cell_k, -1, Pango.EllipsizeMode.NONE),
+            (_('Filename'), (9, 7), self._cell_filename, 100, Pango.EllipsizeMode.END),
+            (_('Path'), (9, 7), self._cell_path, -1, Pango.EllipsizeMode.NONE),
             ))
 
         self.tree_view.set_rules_hint(True)
         self.tree_view.set_rubber_banding(True)
-        self.tree_selection.set_mode(gtk.SELECTION_MULTIPLE)
+        self.tree_selection.set_mode(Gtk.SelectionMode.MULTIPLE)
 
     def reload(self):
         if self.catalogs.update_required(self._old_cat_data):
@@ -1318,8 +1344,8 @@ class FlatPage(ViewerCommon):
 
     def repair_focusability(self):
         PageCommon.repair_focusability(self)
-        self.fuzzy_entry.set_flags(gtk.CAN_FOCUS)
-        self.where_entry.set_flags(gtk.CAN_FOCUS)
+        self.fuzzy_entry.set_can_focus(True)
+        self.where_entry.set_can_focus(True)
 
     _queries_table = {
         PROKYON_3:
@@ -1352,13 +1378,16 @@ class FlatPage(ViewerCommon):
                     SELECT
                     concat_ws(" ",artist.prefix,artist.name),
                     concat_ws(" ",album.prefix,album.name),
-                    track as tracknumber, title, time as length,bitrate,
+                    IFNULL(track, 0) as tracknumber,
+                    title,
+                    IFNULL(time, 0) as length,
+                    IFNULL(bitrate, 0),
                     file,
                     album.disk as disk,
                     catalog.id as catalog_id,
                     MAX(object_count.date) as max_date_played,
                     SUBSTR(MAX(CONCAT(object_count.date, user.fullname)), 11) AS played_by,
-                    played,
+                    IFNULL(played, 0),
                     __played_by_me__
                     FROM song
                     LEFT JOIN artist ON artist.id = song.artist
@@ -1378,13 +1407,16 @@ class FlatPage(ViewerCommon):
                     SELECT
                     concat_ws(" ", artist.prefix, artist.name) as artist,
                     concat_ws(" ", album.prefix, album.name) as albumname,
-                    track as tracknumber, title,time as length, bitrate,
+                    IFNULL(track, 0) as tracknumber,
+                    title,
+                    IFNULL(time, 0) as length,
+                    IFNULL(bitrate, 0),
                     file,
                     album.disk as disk,
                     catalog.id as catalog_id,
                     MAX(object_count.date) as max_date_played,
                     SUBSTR(MAX(CONCAT(object_count.date, user.fullname)), 11) AS played_by,
-                    played,
+                    IFNULL(played, 0),
                     __played_by_me__
                     FROM song
                     LEFT JOIN album on album.id = song.album
@@ -1488,7 +1520,7 @@ class FlatPage(ViewerCommon):
         next_row = cursor.fetchone
         append = self.list_store.append
 
-        for i in xrange(100):
+        for i in range(100):
             if acc.keepalive == False:
                 return False
 
@@ -1502,7 +1534,7 @@ class FlatPage(ViewerCommon):
                 append((found, ) + row)
             else:
                 if found:
-                    self.tree_cols[0].set_title("(%s)" % found)
+                    self.tree_cols[0].set_title(f"({found})")
                     self.tree_view.set_model(self.list_store)
                 return False
 
@@ -1510,13 +1542,13 @@ class FlatPage(ViewerCommon):
         return True
 
 
-class CatalogsInterface(gobject.GObject):
-    __gsignals__ = { "changed" : (gobject.SIGNAL_RUN_LAST, None, ()) }
+class CatalogsInterface(GObject.GObject):
+    __gsignals__ = { "changed" : (GObject.SIGNAL_RUN_LAST, None, ()) }
     time_unit_table = {N_('Minutes'): 60, N_('Hours'): 3600,
                        N_('Days'): 86400, N_('Weeks'): 604800}
     
     def __init__(self):
-        gobject.GObject.__init__(self)
+        GObject.GObject.__init__(self)
         self._dict = {}
 
     def clear(self):
@@ -1528,7 +1560,7 @@ class CatalogsInterface(gobject.GObject):
     def update(self, liststore):
         """Replacement of the standard dict update method.
         
-        This one interprets a CatalogPage gtk.ListStore.
+        This one interprets a CatalogPage Gtk.ListStore.
         """
         
         self._dict.clear()
@@ -1570,14 +1602,14 @@ class CatalogsInterface(gobject.GObject):
         return os.path.isfile(path), path
     
     def sql(self):
-        ids = tuple(x for x in self._dict.iterkeys())
+        ids = tuple(x for x in self._dict.keys())
         if not ids:
             return "FALSE"
 
         if len(ids) == 1:
-            which = "catalog = %d" % ids[0]
+            which = f"catalog = {ids[0]}"
         else:
-            which = "catalog IN %s" % str(ids)
+            which = f"catalog IN {ids}"
 
         return which + ' AND catalog.catalog_type = "local"'
     
@@ -1593,9 +1625,9 @@ class CatalogsInterface(gobject.GObject):
     @staticmethod
     def _stripped_copy(_dict):
         copy = {}
-        for key1, val1 in _dict.iteritems():
+        for key1, val1 in _dict.items():
             copy[key1] = {}
-            for key2, val2 in val1.iteritems():
+            for key2, val2 in val1.items():
                 if key2 not in ("peel", "prepend", "lpscale"):
                     copy[key1][key2] = val2
 
@@ -1605,29 +1637,29 @@ class CatalogsInterface(gobject.GObject):
 class CatalogsPage(PageCommon):
     def __init__(self, notebook, interface):
         self.interface = interface
-        self.refresh = gtk.Button(stock=gtk.STOCK_REFRESH)
+        self.refresh = Gtk.Button(stock=Gtk.STOCK_REFRESH)
         self.refresh.connect("clicked", self._on_refresh)
         PageCommon.__init__(self, notebook, _("Catalogs"), self.refresh)
         
         # active, peel, prepend, lpscale_qty, lpscale_unit, id, name, path,
         # last_update, last_clean, last_add
-        self.list_store = gtk.ListStore(
+        self.list_store = Gtk.ListStore(
                         int, int, str, int, str, int, str, str, int, int, int)
         self.tree_cols = self._make_tv_columns(self.tree_view, (
-            (_('Name'), 6, None, 65, pango.ELLIPSIZE_END),
-            (_('Catalog Path'), 7, None, 100, pango.ELLIPSIZE_END),
-            (_('Prepend Path'), 2, None, -1, pango.ELLIPSIZE_NONE)
+            (_('Name'), 6, None, 65, Pango.EllipsizeMode.END),
+            (_('Catalog Path'), 7, None, 100, Pango.EllipsizeMode.END),
+            (_('Prepend Path'), 2, None, -1, Pango.EllipsizeMode.NONE)
             ))
 
-        rend1 = gtk.CellRendererToggle()
+        rend1 = Gtk.CellRendererToggle()
         rend1.set_activatable(True)
         rend1.connect("toggled", self._on_toggle)
         self.tree_view.insert_column_with_attributes(0, "", rend1, active=0)
 
-        col = gtk.TreeViewColumn(_('Last Played Scale'))
+        col = Gtk.TreeViewColumn(_('Last Played Scale'))
 
-        adj = gtk.Adjustment(0.0, 0.0, 999.0, 1.0, 1.0)
-        rend2 = gtk.CellRendererSpin()
+        adj = Gtk.Adjustment(0.0, 0.0, 999.0, 1.0, 1.0)
+        rend2 = Gtk.CellRendererSpin()
         rend2.props.editable = True
         rend2.props.adjustment = adj
         rend2.props.xalign = 1.0
@@ -1636,10 +1668,10 @@ class CatalogsPage(PageCommon):
         col.pack_start(rend2, False)
         col.add_attribute(rend2, "text", 3)
 
-        lp_unit_scale_store = gtk.ListStore(str)
+        lp_unit_scale_store = Gtk.ListStore(str)
         for each in (N_('Minutes'), N_('Hours'), N_('Days'), N_('Weeks')):
             lp_unit_scale_store.append((each,))
-        lp_unit_scale_cr = gtk.CellRendererCombo()
+        lp_unit_scale_cr = Gtk.CellRendererCombo()
         lp_unit_scale_cr.props.has_entry = False
         lp_unit_scale_cr.props.editable = True
         lp_unit_scale_cr.props.model = lp_unit_scale_store
@@ -1649,8 +1681,8 @@ class CatalogsPage(PageCommon):
         col.set_cell_data_func(lp_unit_scale_cr, self._translate_scale)
         self.tree_view.insert_column(col, 3)
 
-        adj = gtk.Adjustment(0.0, 0.0, 999.0, 1.0, 1.0)
-        rend3 = gtk.CellRendererSpin()
+        adj = Gtk.Adjustment(0.0, 0.0, 999.0, 1.0, 1.0)
+        rend3 = Gtk.CellRendererSpin()
         rend3.props.editable = True
         rend3.props.adjustment = adj
         rend3.props.xalign = 1.0
@@ -1659,7 +1691,7 @@ class CatalogsPage(PageCommon):
         col = self.tree_view.insert_column_with_attributes(4, _("Path Peel"),
                                                                 rend3, text=1)
 
-        rend4 = self.tree_view.get_column(5).get_cell_renderers()[0]
+        rend4 = self.tree_view.get_column(5).get_cells()[0]
         rend4.props.editable = True
         rend4.connect("edited", self._on_prepend_edited)
 
@@ -1682,7 +1714,7 @@ class CatalogsPage(PageCommon):
         PageCommon.deactivate(self, *args, **kwargs)
         self.interface.clear()
 
-    def _translate_scale(self, col, cell, model, iter):
+    def _translate_scale(self, col, cell, model, iter, data):
         cell.props.text = _(model.get_value(iter, 4))
 
     def _get_active_catalogs(self):
@@ -1783,7 +1815,7 @@ class CatalogsPage(PageCommon):
         notify(str(exception))
         if exception[0] == 2006:
             raise
-        
+
         idle_add(threadslock(self.tree_view.set_model), self.list_store)
         idle_add(threadslock(self.refresh.set_sensitive), True)
 
@@ -1800,7 +1832,7 @@ class CatalogsPage(PageCommon):
 
                 if db_row is None:
                     break
-                
+    
                 self.list_store.append((0, 0, "", 4, N_('Weeks')) + db_row)
 
         self._restore_user_data()
@@ -1810,13 +1842,13 @@ class CatalogsPage(PageCommon):
         return False
         
 
-class MediaPane(gtk.VBox):
+class MediaPane(Gtk.VBox):
     """Database song details are displayed in this widget."""
 
     def __init__(self):
-        gtk.VBox.__init__(self)
+        Gtk.VBox.__init__(self)
 
-        self.notebook = gtk.Notebook()
+        self.notebook = Gtk.Notebook()
         self.pack_start(self.notebook)
         
         catalogs = CatalogsInterface()
@@ -1828,7 +1860,7 @@ class MediaPane(gtk.VBox):
         if have_songdb:
             self.prefs_controls.bind(self._dbtoggle)
 
-        spc = gtk.VBox()
+        spc = Gtk.VBox()
         spc.set_border_width(2)
         self.pack_start(spc, False)
         spc.show()
@@ -1851,7 +1883,7 @@ class MediaPane(gtk.VBox):
         """Grab column widths as textual data."""
         
         try:
-            target = getattr(self, "_%s_page" % keyval)
+            target = getattr(self, f"_{keyval}_page")
         except AttributeError as e:
             print(e)
             return ""
@@ -1863,7 +1895,7 @@ class MediaPane(gtk.VBox):
         
         if data:
             try:
-                target = getattr(self, "_%s_page" % keyval)
+                target = getattr(self, f"_{keyval}_page")
             except AttributeError as e:
                 print(e)
                 return
@@ -1875,17 +1907,17 @@ class MediaPane(gtk.VBox):
             # Connect and discover the database type.
             self.usesettings = usesettings
             for i in range(1, 4):
-                setattr(self, "_acc%d" % i, DBAccessor(**accdata))
+                setattr(self, f"_acc{i}", DBAccessor(**accdata))
             self._acc1.request(('SHOW tables',), self._stage_1, self._fail_1)
         else:
             try:
-                for i in xrange(1, 4):
-                    getattr(self, "_acc%d" % i).close()
+                for i in range(1, 4):
+                    getattr(self, f"_acc{i}").close()
             except AttributeError:
                 pass
             else:
                 for each in "tree flat catalogs".split():
-                    getattr(self, "_%s_page" % each).deactivate()
+                    getattr(self, f"_{each}_page").deactivate()
             self.hide()
 
     @staticmethod

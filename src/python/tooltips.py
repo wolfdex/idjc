@@ -15,8 +15,8 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-import gtk
-
+import gi
+from gi.repository import Gtk
 
 
 class TooltipsGroup:
@@ -25,33 +25,27 @@ class TooltipsGroup:
     def __init__(self):
         self.enabled = False
 
-
     def set_tip(self, widget, tip_text):
         widget.set_tooltip_window(None)
         widget.connect("query-tooltip", self.cb_query_tooltip, tip_text)
         widget.set_has_tooltip(True)
 
-
     def enable(self):
         self.enabled = True
-
 
     def disable(self):
         self.enabled = False
 
-
     def cb_query_tooltip(self, widget, x, y, keyboard_mode, tooltip, tip_text):
-        label = gtk.Label(tip_text)
+        label = Gtk.Label(tip_text)
         label.set_line_wrap(True)
         tooltip.set_custom(label)
         label.show()
         return self.enabled
 
 
-
 # An application wide tooltips group.
 MAIN_TIPS = TooltipsGroup()
-
 
 # Global tip setting function.
 def set_tip(widget, tip_text):

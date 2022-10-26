@@ -3,7 +3,7 @@
 Generated from file __init__.py.in.in -- edit the original.
 """
 
-#   Copyright (C) 2011, 2012 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#   Copyright (C) 2011-2020 Stephen Fairchild (s-fairchild@users.sourceforge.net)
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 2 of the License, or
@@ -23,9 +23,13 @@ import os
 import gettext
 import ctypes
 
-import pygtk
-pygtk.require("2.0")
-import glib
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("GLib", "2.0")
+gi.require_version("GObject", "2.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GLib
 
 from .utils import FixedAttributes
 from .utils import PolicedAttributes
@@ -48,13 +52,11 @@ def lib_probe(at_runtime, names, extension):
         return True, ""
 
 
-class FGlobs(object):
+class FGlobs(metaclass=FixedAttributes):
     """Namespace class of variables which cannot be altered.
 
     These are set by the build process.
     """
-
-    __metaclass__ = FixedAttributes
 
     datarootdir = PathStr("""@datarootdir@""")
     libdir = PathStr("""@libdir@""")
@@ -87,12 +89,10 @@ _ = gettext.translation(FGlobs.package_name, FGlobs.localedir,
                                                         fallback=True).gettext
 
 
-class PGlobs(object):
+class PGlobs(metaclass = PolicedAttributes):
     """Values which cannot be changed once they have been read."""
       
-    __metaclass__ = PolicedAttributes
-
-    config_dir = PathStr(glib.get_user_config_dir()) / FGlobs.package_name
+    config_dir = PathStr(GLib.get_user_config_dir()) / FGlobs.package_name
     #config_dir = PathStr(os.path.expanduser("~")) / ("." + FGlobs.package_name)
     profile_dir = config_dir / "profiles"
     dbus_bus_basename = "net.sf." + FGlobs.package_name
@@ -117,8 +117,8 @@ class PGlobs(object):
 def main():
     """Package execution entry point."""
 
-    from .prelims import ProfileManager  # pylint: disable=W0404
+    from .prelims import ProfileManager
     ProfileManager()
 
-    from . import maingui  # pylint: disable=W0404
+    from . import maingui
     return maingui.main()

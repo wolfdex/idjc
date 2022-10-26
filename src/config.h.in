@@ -16,6 +16,9 @@
 /* Set if avcodec_receive_packet function exists */
 #undef HAVE_AVCODEC_RECEIVE_PACKET
 
+/* Set if function exists */
+#undef HAVE_AVCODEC_REGISTER_ALL
+
 /* Set if avcodec_send_packet function exists */
 #undef HAVE_AVCODEC_SEND_PACKET
 
@@ -33,6 +36,9 @@
 
 /* Set if av_packet_unref function exists */
 #undef HAVE_AV_PACKET_UNREF
+
+/* Set if function exists */
+#undef HAVE_AV_REGISTER_ALL
 
 /* Define to 1 if you have the `canonicalize_file_name' function. */
 #undef HAVE_CANONICALIZE_FILE_NAME

@@ -1,3 +1,55 @@
+* Changes in version 0.9.0 *
+
+Added support for Python3 provided by B.Millham.
+
+Updated libshout requirement for libshout-idjc 2.4.5
+
+Added check for shout_set_content_format in libshout-idjc.
+
+* Changes in version 0.8.18 *
+
+Removed obsolete PyGTK build time check.
+
+Upgraded user interface to GTK 3.
+
+Fixed issue where F2 triggers the menu rather than an effect.
+
+Copyright year bump to 2020.
+
+Fixed an instance of libswresample configuration being incomplete causing playback of some m4a files to fail.
+
+Added more pre-gain levels for stream broadcast format setting.
+
+Fixed a bug causing repeat metadata to appear in the track history and irc announcements whenever a playlist control is encountered.
+
+Handling of deprecated ffmpeg registration funtion calls.
+
+Fix for python-irc obsolete server.execute_delayed call in irc.py
+
+Code hardening and deref warning fix in oggdec.c.
+
+Forced checking for Python 2.7 version.
+
+Copyright year bump to 2019.
+
+Added core dependency libogg in configure.ac
+
+Added 'announcement' signal to IDJCMonitor.
+
+Removed dual mixing of auxiliary audio to the DJ mix when monitoring a VOIP call in red phone mode.
+
+Made the audio channels' 'In the DJ Mix' option work when assigned to auxiliary (i.e. non microphone) channel mode.
+
+Added 'player-started' and 'player-stopped' signals to IDJCMonitor.
+
+Effects pane can now be detached to its own window.
+
+Enabled key bindings when an announcement dialog is active.
+
+Metadata control string can now be changed using DBus.
+
+Copyright year bump to 2018.
+
 * Changes in version 0.8.17 *
 
 Code cleanup.

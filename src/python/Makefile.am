@@ -11,7 +11,7 @@ idjcpkgpython_PYTHON = dialogs.py gtkstuff.py irc.py jingles.py licence_window.p
 
 nodist_idjcpkgpython_PYTHON = __init__.py
 
-dist_noinst_PYTHON = __init__.py.in.in
+dist_noinst_DATA = __init__.py.in.in
 
 __init__.py: __init__.py.in
 	sed -e 's|$${pkgdatadir}|${pkgdatadir}|g'	\

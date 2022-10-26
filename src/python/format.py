@@ -1,5 +1,5 @@
 #   format.py: format selection user interface widgets
-#   Copyright (C) 2012 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#   Copyright (C) 2012-2020 Stephen Fairchild (s-fairchild@users.sourceforge.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -22,8 +22,9 @@ import gettext
 import ctypes
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-import gtk
-import gobject
+import gi
+from gi.repository import Gtk
+from gi.repository import GObject
 
 from idjc import FGlobs
 from .gtkstuff import LEDDict
@@ -34,9 +35,7 @@ _ = gettext.translation(FGlobs.package_name, FGlobs.localedir,
                                                         fallback=True).gettext
 
 
-class TestEncoder(object):
-    __metaclass__ = ABCMeta
-
+class TestEncoder(metaclass=ABCMeta):
     @abstractproperty
     def default_bitrate_stereo(self):
         """A guaranteed good bitrate when encoding 2 channels."""
@@ -283,7 +282,7 @@ def format_collate(specifier):
     return d
 
 
-class FormatDropdown(gtk.VBox):
+class FormatDropdown(Gtk.VBox):
     def __init__(self, prev_object, title, ident, elements, row, tooltip=None):
         """Parameter 'elements' is a tuple of dictionaries.
         
@@ -296,33 +295,32 @@ class FormatDropdown(gtk.VBox):
         self.prev_object = prev_object
         self._ident = ident
         self._row = row
-        gtk.VBox.__init__(self)
-        frame = gtk.Frame(" %s " % title)
+        Gtk.VBox.__init__(self)
+        frame = Gtk.Frame.new(" %s " % title)
         frame.set_label_align(0.5, 0.5)
         if tooltip is not None:
             set_tip(frame, tooltip)
-        self.pack_start(frame, fill=False)
-        size_group = gtk.SizeGroup(gtk.SIZE_GROUP_VERTICAL)
-        vbox = gtk.VBox()
-        vbox.set_border_width(3)
-        frame.add(vbox)
+        self.pack_start(frame, expand=True, fill=True, padding=6)
+        self._stack = Gtk.Stack()
+        self._stack.set_hhomogeneous(False)
+        self._stack.set_vhomogeneous(True)
+        self._stack.set_interpolate_size(True)
+        self._stack.set_border_width(3)
+        frame.add(self._stack)
         
-        model = gtk.ListStore(gobject.TYPE_PYOBJECT)
+        model = Gtk.ListStore(GObject.TYPE_PYOBJECT)
         default = 0
         for index, each in enumerate(elements):
             if "default" in each and each["default"]:
                 default = index
             model.append(((each),))
-        cell_text = gtk.CellRendererText()
-        self._combo_box = gtk.ComboBox(model)
-        size_group.add_widget(self._combo_box)
-        self._combo_box.pack_start(cell_text)
+        cell_text = Gtk.CellRendererText()
+        self._combo_box = Gtk.ComboBox.new_with_model(model)
+        self._combo_box.pack_start(cell_text, True)
         self._combo_box.set_cell_data_func(cell_text, self._cell_data_func)
-        vbox.pack_start(self._combo_box, False)
-        self._fixed = gtk.Label()
-        size_group.add_widget(self._fixed)
-        vbox.pack_start(self._fixed, False)
-        self._fixed.set_no_show_all(True)
+        self._stack.add_named(self._combo_box, "variable")
+        self._fixed = Gtk.Label()
+        self._stack.add_named(self._fixed, "fixed")
 
         self._combo_box.connect("changed", self._on_changed)
         self._combo_box.set_active(default)
@@ -348,7 +346,7 @@ class FormatDropdown(gtk.VBox):
 
     @property
     def applied(self):
-        return self._fixed.props.visible
+        return self._stack.get_visible_child_name() == "fixed"
         
     @property
     def row(self):
@@ -361,15 +359,17 @@ class FormatDropdown(gtk.VBox):
     def apply(self):
         cbp = self._combo_box.props
         if cbp.model[cbp.active][0].get("sensitive", True):
-            self._combo_box.hide()
-            self._fixed.show()
+            self._stack.set_transition_type(Gtk.StackTransitionType.UNDER_UP)
+            self._stack.set_transition_duration(275)
+            self._stack.set_visible_child_name("fixed")
             return True
         else:
             return False
         
     def unapply(self):
-        self._combo_box.show()
-        self._fixed.hide()
+        self._stack.set_transition_type(Gtk.StackTransitionType.OVER_DOWN)
+        self._stack.set_transition_duration(200)
+        self._stack.set_visible_child_name("variable")
 
     @property
     def value(self):
@@ -386,13 +386,13 @@ class FormatDropdown(gtk.VBox):
                     break
 
 
-class FormatSpin(gtk.VBox):
+class FormatSpin(Gtk.VBox):
     def __init__(self, prev_object, title, ident, elements, row, unit, next_element_name, suggested_values, tooltip=None):
         """Parameter 'elements' is a tuple of dictionaries.
         
         @title: appears above the widget
         @name: is the official name of the control element
-        @elements: the values of the gtk.Adjustment as integers
+        @elements: the values of the Gtk.Adjustment as integers
         @unit: e.g. " Hz"
         @suggested_values: sequence of standard values
         """
@@ -402,49 +402,48 @@ class FormatSpin(gtk.VBox):
         self._row = row
         self._unit = unit
         self._next_element_name = next_element_name
-        gtk.VBox.__init__(self)
-        frame = gtk.Frame(" %s " % title)
+        Gtk.VBox.__init__(self)
+        frame = Gtk.Frame.new(" %s " % title)
         frame.set_label_align(0.5, 0.5)
         if tooltip is not None:
             set_tip(frame, tooltip)
-        self.pack_start(frame, fill=False)
-        vbox = gtk.VBox()
-        vbox.set_border_width(3)
-        frame.add(vbox)
+        self.pack_start(frame, expand=True, fill=True, padding=6)
+        self._stack = Gtk.Stack()
+        self._stack.set_hhomogeneous(False)
+        self._stack.set_vhomogeneous(True)
+        self._stack.set_interpolate_size(True)
+        self._stack.set_border_width(3)
+        frame.add(self._stack)        
         
-        adjustment = gtk.Adjustment(*(float(x) for x in elements))
-        self._spin_button = gtk.SpinButton(adjustment)
+        adjustment = Gtk.Adjustment(*(float(x) for x in elements))
+        self._spin_button = Gtk.SpinButton.new(adjustment, 0, 0)
         if suggested_values is not None:
             self._spin_button.connect("populate_popup", self._on_populate_popup, suggested_values)
             if tooltip is None:
                 set_tip(self._spin_button, _('Right click for suggested values.'))
-        vbox.pack_start(self._spin_button, False)
-        self._fixed = gtk.Label()
+        self._stack.add_named(self._spin_button, "variable")
+        self._fixed = Gtk.Label()
         self._fixed.set_alignment(0.5, 0.5)
-        vbox.pack_start(self._fixed)
-        self._fixed.set_no_show_all(True)
+        self._stack.add_named(self._fixed, "fixed")
 
         self._spin_button.connect("value-changed", self._on_changed)
         self._spin_button.emit("value-changed")
         
         self.show_all()
-        size_group = gtk.SizeGroup(gtk.SIZE_GROUP_VERTICAL)
-        size_group.add_widget(prev_object.get_children()[0])
-        size_group.add_widget(frame)
         self.scale = 1
 
     def _on_changed(self, spin_button):
         self._fixed.set_text(str(int(spin_button.props.value)) + self._unit)
 
     def _on_populate_popup(self, spin, menu, values):
-        mi = gtk.MenuItem(_('Suggested Values'))
+        mi = Gtk.MenuItem(_('Suggested Values'))
         menu.append(mi)
         mi.show()
-        submenu = gtk.Menu()
+        submenu = Gtk.Menu()
         mi.set_submenu(submenu)
         submenu.show()
         for each in values:
-            mi = gtk.MenuItem(str(each))
+            mi = Gtk.MenuItem(str(each))
             mi.connect("activate", self._on_popup_activate, spin, each)
             submenu.append(mi)
             mi.show()
@@ -458,7 +457,7 @@ class FormatSpin(gtk.VBox):
 
     @property
     def applied(self):
-        return self._fixed.props.visible
+        return self._stack.get_visible_child_name() == "fixed"
 
     @property
     def row(self):
@@ -469,13 +468,15 @@ class FormatSpin(gtk.VBox):
         return self._ident
 
     def apply(self):
-        self._spin_button.hide()
-        self._fixed.show()
+        self._stack.set_transition_type(Gtk.StackTransitionType.UNDER_UP)
+        self._stack.set_transition_duration(275)
+        self._stack.set_visible_child_name("fixed")
         return True
         
     def unapply(self):
-        self._spin_button.show()
-        self._fixed.hide()
+        self._stack.set_transition_type(Gtk.StackTransitionType.OVER_DOWN)
+        self._stack.set_transition_duration(200)
+        self._stack.set_visible_child_name("variable")
         
     @property
     def value(self):
@@ -501,14 +502,18 @@ class FormatPregain(FormatDropdown):
     def __init__(self, prev_object):
         codec = format_collate(prev_object)["codec"]
         
-        FormatDropdown.__init__(self, prev_object, _('Pregain'), "pregain", (
+        FormatDropdown.__init__(self, prev_object, _('Pre-gain'), "pregain", (
             dict(display_text=_('0 dB'), value="1.0"),
             dict(display_text=_('-0.5 dB'), value="0.944"),
             dict(display_text=_('-1.0 dB'), value="0.891", default=(codec in ("aac", "aacpv2"))),
             dict(display_text=_('-1.5 dB'), value="0.841"),
             dict(display_text=_('-2.0 dB'), value="0.794", default=(codec in ("mp2", "mp3"))),
             dict(display_text=_('-2.5 dB'), value="0.750"),
-            dict(display_text=_('-3.0 dB'), value="0.708", default=(codec == "speex"))), 1,
+            dict(display_text=_('-3.0 dB'), value="0.708", default=(codec == "speex")),
+            dict(display_text=_('-3.5 dB'), value="0.668"),
+            dict(display_text=_('-4.0 dB'), value="0.630"),
+            dict(display_text=_('-4.5 dB'), value="0.595"),
+            dict(display_text=_('-5.0 dB'), value="0.562")), 1,
             _("A blanket gain reduction to promote audio quality when using long established lossy audio codecs like mp3 with loud audio material.\n\n"
             "ReplayGain makes this feature generally unnecessary and the correct setting in that case is 0 dB."))
 
@@ -612,7 +617,7 @@ class FormatCodecMPEGMP2V1BitRates(FormatDropdown):
     """MP2 MPEG1 bit rates. Some channel modes are restricted by bitrate."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Bitrate'), "bitrate", (
+        FormatDropdown.__init__(self, prev_object, _('Bit Rate'), "bitrate", (
             dict(display_text="384 kbps", value="384", chain="FormatCodecMPEGMP2ModeStereo"),
             dict(display_text="320 kbps", value="320", chain="FormatCodecMPEGMP2ModeStereo"),
             dict(display_text="256 kbps", value="256", chain="FormatCodecMPEGMP2ModeStereo"),
@@ -633,7 +638,7 @@ class FormatCodecMPEGMP2V2BitRates(FormatDropdown):
     """MP2 MPEG2 bit rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Bitrate'), "bitrate", (
+        FormatDropdown.__init__(self, prev_object, _('Bit Rate'), "bitrate", (
             dict(display_text="160 kbps", value="160", chain="FormatCodecMPEGMP2Mode"),
             dict(display_text="144 kbps", value="144", chain="FormatCodecMPEGMP2Mode"),
             dict(display_text="128 kbps", value="128", chain="FormatCodecMPEGMP2Mode"),
@@ -654,7 +659,7 @@ class FormatCodecMPEGMP2V1SampleRates(FormatDropdown):
     """MP2 MPEG1 sample rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text="48000 Hz", value="48000", chain="FormatCodecMPEGMP2V1BitRates"),
             dict(display_text="44100 Hz", value="44100", chain="FormatCodecMPEGMP2V1BitRates", default=True),
             dict(display_text="32000 Hz", value="32000", chain="FormatCodecMPEGMP2V1BitRates")), 0)
@@ -664,7 +669,7 @@ class FormatCodecMPEGMP2V2SampleRates(FormatDropdown):
     """MP2 MPEG2 sample rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text="24000 Hz", value="24000", chain="FormatCodecMPEGMP2V2BitRates"),
             dict(display_text="22050 Hz", value="22050", chain="FormatCodecMPEGMP2V2BitRates", default=True),
             dict(display_text="16000 Hz", value="16000", chain="FormatCodecMPEGMP2V2BitRates")), 0)
@@ -719,7 +724,7 @@ class FormatCodecMPEGMP3V1BitRates(FormatDropdown):
     """MP3 MPEG1 bit rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Bitrate'), "bitrate", (
+        FormatDropdown.__init__(self, prev_object, _('Bit Rate'), "bitrate", (
             dict(display_text="320 kbps", value="320", chain="FormatCodecMPEGMP3Mode"),
             dict(display_text="256 kbps", value="256", chain="FormatCodecMPEGMP3Mode"),
             dict(display_text="224 kbps", value="224", chain="FormatCodecMPEGMP3Mode"),
@@ -740,7 +745,7 @@ class FormatCodecMPEGMP3V2BitRates(FormatDropdown):
     """MP3 MPEG2 and 2.5 bit rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Bitrate'), "bitrate", (
+        FormatDropdown.__init__(self, prev_object, _('Bit Rate'), "bitrate", (
             dict(display_text="160 kbps", value="160", chain="FormatCodecMPEGMP3Mode"),
             dict(display_text="144 kbps", value="144", chain="FormatCodecMPEGMP3Mode"),
             dict(display_text="128 kbps", value="128", chain="FormatCodecMPEGMP3Mode"),
@@ -761,7 +766,7 @@ class FormatCodecMPEGMP3V1SampleRates(FormatDropdown):
     """MP3 MPEG1 sample rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text="48000 Hz", value="48000", chain="FormatCodecMPEGMP3V1BitRates"),
             dict(display_text="44100 Hz", value="44100", chain="FormatCodecMPEGMP3V1BitRates", default=True),
             dict(display_text="32000 Hz", value="32000", chain="FormatCodecMPEGMP3V1BitRates")), 0)
@@ -771,7 +776,7 @@ class FormatCodecMPEGMP3V2SampleRates(FormatDropdown):
     """MP3 MPEG2 sample rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text="24000 Hz", value="24000", chain="FormatCodecMPEGMP3V2BitRates"),
             dict(display_text="22050 Hz", value="22050", chain="FormatCodecMPEGMP3V2BitRates", default=True),
             dict(display_text="16000 Hz", value="16000", chain="FormatCodecMPEGMP3V2BitRates")), 0)
@@ -781,7 +786,7 @@ class FormatCodecMPEGMP3V2_5SampleRates(FormatDropdown):
     """MP3 MPEG2.5 non standard sample rates."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text="12000 Hz", value="12000", chain="FormatCodecMPEGMP3V2BitRates"),
             dict(display_text="11025 Hz", value="11025", chain="FormatCodecMPEGMP3V2BitRates", default=True),
             dict(display_text="8000 Hz", value="8000", chain="FormatCodecMPEGMP3V2BitRates")), 0)
@@ -875,7 +880,7 @@ class FormatCodecVorbisBitRate(FormatSpin):
         er = EncoderRange(VorbisTestEncoder())
         sr = int(dict_["samplerate"])
         bounds = er.bitrate_bounds(channels, sr)
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             (128000,) + bounds + (1, 10), 0, " bps", "FormatCodecVorbisVariability",
             er.good_bitrates(channels, sr))
 
@@ -887,7 +892,7 @@ class FormatCodecVorbisSampleRate(FormatSpin):
         channels = 1 if format_collate(prev_object)["mode"] == "mono" else 2
         er = EncoderRange(VorbisTestEncoder())
         bounds = er.bounds(channels)["samplerate_bounds"]
-        FormatSpin.__init__(self, prev_object, _('Samplerate'), "samplerate",
+        FormatSpin.__init__(self, prev_object, _('Sample Rate'), "samplerate",
             (44100,) + bounds + (1, 10), 0, " Hz", "FormatCodecVorbisBitRate",
             er.good_samplerates(channels))
 
@@ -897,7 +902,7 @@ class FormatCodecFLACSampleRate(FormatSpin):
     
     
     def __init__(self, prev_object):
-        FormatSpin.__init__(self, prev_object, _('Samplerate'), "samplerate",
+        FormatSpin.__init__(self, prev_object, _('Sample Rate'), "samplerate",
             (44100, 1, 655350, 1, 10), 0, " Hz", "FormatCodecFLACBits",
             (96000, 88200, 48000, 44100))
 
@@ -924,7 +929,7 @@ class FormatCodecOpusPostGain(FormatDropdown):
     """Level adjustment for audio before hitting the codec."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Postgain'), "postgain", (
+        FormatDropdown.__init__(self, prev_object, _('Post-gain'), "postgain", (
             dict(display_text=_('3.0 dB'), value="768", chain="FormatMetadataUTF8"),
             dict(display_text=_('2.5 dB'), value="640", chain="FormatMetadataUTF8"),
             dict(display_text=_('2.0 dB'), value="512", chain="FormatMetadataUTF8"),
@@ -980,7 +985,7 @@ class FormatCodecOpusBitRate(FormatSpin):
         dict_ = format_collate(prev_object)
         channels = 1 if dict_["mode"] == "mono" else 2
         bounds = (6 * channels, 256 * channels)
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             ((64, 96)[channels - 1],) + bounds + (1, 10), 0, " kbps", "FormatCodecOpusComplexity",
             (256 * channels, 128 * channels, 64 * channels, 48 * channels, 32 * channels, 16 * channels))
 
@@ -1030,7 +1035,7 @@ class FormatCodecMPEGAACBitrate(FormatSpin):
     """AAC bit rate selection."""
     
     def __init__(self, prev_object):
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             (128000, 32000, 320000, 1, 10), 0, " bps", "FormatCodecMPEGAACMode",
             (192000, 160000, 128000, 112000, 96000, 80000, 64000, 48000, 45000, 32000))
 
@@ -1040,7 +1045,7 @@ class FormatCodecMPEGAACPlusV2Bitrate(FormatSpin):
     """AAC bit rate selection."""
     
     def __init__(self, prev_object):
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             (64000, 16000, 72000, 1, 10), 0, " bps", "FormatCodecMPEGAACModeStereo",
             (72000, 64000, 48000, 45000, 32000, 24000, 16000))
 
@@ -1050,7 +1055,7 @@ class FormatCodecMPEGAACSamplerate(FormatDropdown):
     """Sample rates as allowed when using the ADTS header."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text=_('96000 Hz'), value="96000", chain="FormatCodecMPEGAACBitrate"),
             dict(display_text=_('88200 Hz'), value="88200", chain="FormatCodecMPEGAACBitrate"),
             dict(display_text=_('64000 Hz'), value="64000", chain="FormatCodecMPEGAACBitrate"),
@@ -1070,7 +1075,7 @@ class FormatCodecMPEGAACPlusV2Samplerate(FormatDropdown):
     """Sample rates as allowed when using the ADTS header."""
     
     def __init__(self, prev_object):
-        FormatDropdown.__init__(self, prev_object, _('Samplerate'), "samplerate", (
+        FormatDropdown.__init__(self, prev_object, _('Sample Rate'), "samplerate", (
             dict(display_text=_('48000 Hz'), value="48000", chain="FormatCodecMPEGAACPlusV2Bitrate"),
             dict(display_text=_('44100 Hz'), value="44100", chain="FormatCodecMPEGAACPlusV2Bitrate", default=True)), 0)
 
@@ -1118,7 +1123,7 @@ class FormatCodecWebMVorbisBitRate(FormatSpin):
         er = EncoderRange(VorbisTestEncoder())
         sr = int(dict_["samplerate"])
         bounds = er.bitrate_bounds(channels, sr)
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             (128000,) + bounds + (1, 10), 0, " bps", "FormatMetadataUTF8",
             er.good_bitrates(channels, sr))
 
@@ -1130,7 +1135,7 @@ class FormatCodecWebMVorbisSampleRate(FormatSpin):
         channels = 1 if format_collate(prev_object)["mode"] == "mono" else 2
         er = EncoderRange(VorbisTestEncoder())
         bounds = er.bounds(channels)["samplerate_bounds"]
-        FormatSpin.__init__(self, prev_object, _('Samplerate'), "samplerate",
+        FormatSpin.__init__(self, prev_object, _('Sample Rate'), "samplerate",
             (44100,) + bounds + (1, 10), 0, " Hz", "FormatCodecWebMVorbisBitRate",
             er.good_samplerates(channels))
 
@@ -1151,7 +1156,7 @@ class FormatCodecWebMOpusBitRate(FormatSpin):
         dict_ = format_collate(prev_object)
         channels = 1 if dict_["mode"] == "mono" else 2
         bounds = (6 * channels, 256 * channels)
-        FormatSpin.__init__(self, prev_object, _('Bitrate'), "bitrate",
+        FormatSpin.__init__(self, prev_object, _('Bit Rate'), "bitrate",
             ((64, 96)[channels - 1],) + bounds + (1, 10), 0, " kbps", "FormatMetadataUTF8",
             (256 * channels, 128 * channels, 64 * channels, 48 * channels, 32 * channels, 16 * channels))
         self.scale = 1000
@@ -1191,31 +1196,32 @@ class FormatFamily(FormatDropdown):
             _('Codecs have been grouped by standards body and or container format.'))
 
 
-class FormatControl(gtk.VBox):
+class FormatControl(Gtk.VBox):
     __gproperties__ = {
-        'cap-icecast': (gobject.TYPE_BOOLEAN, 'icecast capable',
+        'cap-icecast': (GObject.TYPE_BOOLEAN, 'icecast capable',
                         'if true this format can stream to icecast',
-                        0, gobject.PARAM_READABLE),
+                        0, GObject.PARAM_READABLE),
                         
-        'cap-shoutcast': (gobject.TYPE_BOOLEAN, 'shoutcast capable',
+        'cap-shoutcast': (GObject.TYPE_BOOLEAN, 'shoutcast capable',
                         'if true this format can stream to shoutcast',
-                        0, gobject.PARAM_READABLE),
+                        0, GObject.PARAM_READABLE),
                         
-        'cap-recordable': (gobject.TYPE_BOOLEAN, 'can be recorded',
+        'cap-recordable': (GObject.TYPE_BOOLEAN, 'can be recorded',
                         'if true this format is compatible with the recording facility',
-                        0, gobject.PARAM_READABLE)
+                        0, GObject.PARAM_READABLE)
     }
     
     def __init__(self, send, receive):
-        gtk.VBox.__init__(self)
+        Gtk.VBox.__init__(self)
         self.set_border_width(6)
         self.set_spacing(4)
-        elem_box = [gtk.HBox()]
+        elem_box = [Gtk.HBox()]
         self.pack_start(elem_box[0])
+        elem_box[-1].set_spacing(2)
         
-        self.caps_frame = gtk.Frame(" %s " % _('Capabilities'))
+        self.caps_frame = Gtk.Frame.new(" %s " % _('Capabilities'))
         self.caps_frame.set_sensitive(False)
-        caps_box = gtk.HBox()
+        caps_box = Gtk.HBox()
         caps_box.set_border_width(6)
         self.caps_frame.add(caps_box)
         self.pack_start(self.caps_frame, fill=False)
@@ -1226,41 +1232,43 @@ class FormatControl(gtk.VBox):
         
         for name, label_text in zip("icecast shoutcast recordable".split(),
                             (_('Icecast'), _('Shoutcast'), _('Recordable'))):
-            hbox = gtk.HBox()
+            hbox = Gtk.HBox()
             hbox.set_spacing(3)
-            label = gtk.Label(label_text)
+            label = Gtk.Label(label_text)
             hbox.pack_start(label, False)
             
-            image = gtk.Image()
+            image = Gtk.Image()
             image.set_from_pixbuf(self.clear)
             hbox.pack_start(image, False)
             
             caps_box.pack_start(hbox, fill=False)
             setattr(self, "_" + name + "_indicator", image)
 
-        elem_box.append(gtk.HBox())
+        elem_box.append(Gtk.HBox())
         self.pack_start(elem_box[-1])
+        elem_box[-1].set_spacing(2)
         
-        button_frame = gtk.Alignment(xalign=1.0, yscale=0.85)
-        button_frame.props.top_padding = 6
-        button_box = gtk.HBox()
+        button_frame = Gtk.Alignment(xalign=1.0, yscale=0.85)
+        button_frame.props.top_padding = 11
+        button_frame.props.bottom_padding = 3
+        button_box = Gtk.HBox()
         button_box.set_spacing(3)
         button_frame.add(button_box)
-        image = gtk.image_new_from_stock(gtk.STOCK_GO_BACK, gtk.ICON_SIZE_MENU)
-        back_button = self._back_button = gtk.Button()
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_GO_BACK, Gtk.IconSize.MENU)
+        back_button = self._back_button = Gtk.Button()
         back_button.set_sensitive(False)
         back_button.add(image)
         button_box.add(back_button)
-        image = gtk.image_new_from_stock(gtk.STOCK_GO_FORWARD, gtk.ICON_SIZE_MENU)
-        apply_button = self.apply_button = gtk.Button()
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_GO_FORWARD, Gtk.IconSize.MENU)
+        apply_button = self.apply_button = Gtk.Button()
         apply_button.add(image)
         button_box.add(apply_button)
 
-        #test_button = gtk.ToggleButton("Test")
+        #test_button = Gtk.ToggleButton("Test")
         #button_box.add(test_button)
         #test_button.connect("toggled", self._on_test)
         
-        elem_box[-1].pack_end(button_frame, True)
+        elem_box[-1].pack_end(button_frame, expand=False, fill=False)
         self.show_all()
 
         self._current = self._first = FormatFamily(prev_object=None)
@@ -1269,7 +1277,7 @@ class FormatControl(gtk.VBox):
         apply_button.connect("clicked", self._on_apply, back_button, elem_box)
         back_button.connect("clicked", self._on_back, apply_button)
         
-        sizegroup = gtk.SizeGroup(gtk.SIZE_GROUP_VERTICAL)
+        sizegroup = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
         for each in elem_box:
             sizegroup.add_widget(each)
         
@@ -1420,7 +1428,7 @@ class FormatControl(gtk.VBox):
     def _start_encoder(self):
         if self._current.applied:
             kvps = [] 
-            for pairs in format_collate(self._current).iteritems():
+            for pairs in format_collate(self._current).items():
                 kvps.append("=".join(pairs))
             kvps.append("encode_source=jack\ncommand=encoder_start\n")
             kvps = "\n".join(kvps)

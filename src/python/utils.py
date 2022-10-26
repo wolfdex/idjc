@@ -32,25 +32,26 @@ import shutil
 import threading
 from functools import wraps
 
+def cmp(a, b):
+    """ cmp was removed in python3, so added this simple replacement """
+    return (a > b) - ( a < b)
+
+
 class Singleton(type):
     """Enforce the singleton pattern upon the user class."""
-
 
     def __init__(cls, name, bases, dict_):
         super(Singleton, cls).__init__(name, bases, dict_)
         cls._instance = None
 
-
     def __call__(cls, *args, **kwds):
         if cls._instance is not None:
             # Return an existing instance.
             return cls._instance
-
         else:
             # No existing instance so instantiate just this once.
             cls._instance = super(Singleton, cls).__call__(*args, **kwds)
             return cls._instance
-
 
 
 def _pa_rlock(func):
@@ -61,29 +62,22 @@ def _pa_rlock(func):
         """Wrapper with locking feature. Performs rlock."""
         
         rlock = type.__getattribute__(cls, "_rlock")
-
         try:
             rlock.acquire()
             return func(cls, *args, **kwds)
-
         finally:
             rlock.release()
-
     return _wrapper
-
 
 
 class FixedAttributes(type):
     """Implements a namespace class of constants."""
 
-
     def __setattr__(cls, name, value):
         raise AttributeError("attribute is locked")
 
-
     def __call__(cls, *args, **kwds):
         raise TypeError("%s object is not callable" % cls.__name__)
-
 
 
 class PolicedAttributes(FixedAttributes):
@@ -108,7 +102,6 @@ class PolicedAttributes(FixedAttributes):
                         super(PolicedAttributes, cls).__getattribute__(attr),
                         *args, **kwds)
                 type.__setattr__(attr, new)
-
             else:
                 raise AttributeError("attribute is locked")
 
@@ -117,20 +110,16 @@ class PolicedAttributes(FixedAttributes):
         dict_["_rlock"] = threading.RLock()
         return super(PolicedAttributes, mcs).__new__(mcs, name, bases, dict_)
 
-
     @_pa_rlock
     def __getattribute__(cls, name):
         type.__getattribute__(cls, "_banned").add(name)
         return type.__getattribute__(cls, name)
 
-
     @_pa_rlock
     def __setattr__(cls, name, value):
         if name in type.__getattribute__(cls, "_banned"):
             FixedAttributes.__setattr__(cls, name, value)
-
         type.__setattr__(cls, name, value)
-
 
 
 class PathStrMeta(type):
@@ -143,55 +132,41 @@ class PathStrMeta(type):
             return cls.__new__(cls, arg)
 
 
-
-class PathStr(str):
+class PathStr(str, metaclass=PathStrMeta):
     """A data type to perform path joins using the / operator.
 
     In this case the higher precedence of / is unfortunate.
     """
 
-    __metaclass__ = PathStrMeta
-
-
-    def __div__(self, other):
+    def __truediv__(self, other):
         return PathStr(os.path.join(str(self), other))
-
 
     def __add__(self, other):
         return PathStr(str.__add__(self, other))
-
 
     def __repr__(self):
         return "PathStr('%s')" % self
 
 
-
 class SlotObject(object):
     """A mutable object containing an immutable object."""
 
-
     __slots__ = ['value']
-
 
     def __init__(self, value):
         self.value = value
 
-
     def __str__(self):
         return str(self.value)
-
 
     def __int__(self):
         return int(self.value)
 
-
     def __float__(self):
         return float(self.value)
 
-
     def __repr__(self):
         return "SlotObject(%s)" % repr(self.value)
-
 
     def __getattr__(self, what):
         """Universal getter for get_ prefix."""
@@ -203,45 +178,57 @@ class SlotObject(object):
 
         if what.startswith("get_"):
             return lambda : self.value
-
         elif what.startswith("set_"):
             return assign
-
         else:
             object.__getattribute__(self, what)
 
 
-
-def string_multireplace(part, table):
+def string_multireplace(part, table, encoding='utf-8'):
     """Replace multiple items in a string.
 
     Table is a sequence of 2 tuples of from, to strings.
+    
+    TOREVIEW: I added scanning the table and parts to ensure
+    that everything is encoded as (by default) utf-8. This
+    was to try and keep most of the bytes/string conversion
+    in one place. It's kinda ugly but works. I'm thinking a
+    more pythonic solution would be to create a new list/tuple class
+    that automatically does this.
     """
 
     if not table:
         return part
 
+    nt = []
+    for r in table:
+        nr = []
+        for c in r:
+            if type(c) is bytes:
+                c = c.decode(encoding, 'replace')
+            nr.append(c)
+        nt.append(nr)
+
+    table = nt
     parts = part.split(table[0][0])
     t_next = table[1:]
 
     for i, each in enumerate(parts):
+        if each is type(bytes):
+            each = each.decode(encoding, 'replace')
+        if i is type(bytes):
+            i = i.decode(encoding, 'replace')
         parts[i] = string_multireplace(each, t_next)
 
     return table[0][1].join(parts)
 
 
-
-class LinkUUIDRegistry(dict):
+class LinkUUIDRegistry(dict, metaclass=Singleton):
     """Manage substitute hard links for data files."""
 
-
-    __metaclass__ = Singleton
-
-    
     link_re = re.compile(
                     "\{[a-fA-F0-9]{8}-([a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}\}")
     link_dir = None
-
 
     def add(self, uuid_, pathname):
         if os.path.exists(pathname):
@@ -249,18 +236,16 @@ class LinkUUIDRegistry(dict):
         else:
             print("LinkUUIDRegistry: pathname does not exist", pathname)
 
-
     def remove(self, uuid_):
         try:
             del self[uuid_]
         except KeyError:
             print("LinkUUIDRegisty: remove -- UUID does not exist: {%s}" % uuid_)
 
-
     def _purge(self, where):
         """Clean orphaned hard links from the links directory."""
 
-        basedir, dirs, files = os.walk(where).next()
+        basedir, dirs, files = next(os.walk(where))
         for filename in files:
             match = self.link_re.match(filename)
             try:
@@ -285,13 +270,12 @@ class LinkUUIDRegistry(dict):
                 print("LinkUUIDRegistry: link directory creation failed:", e)
                 return
 
-        for uuid_, source in self.iteritems():
+        for uuid_, source in self.items():
             ext = os.path.splitext(source)[1]
             if copy:
                 cmd = shutil.copyfile
             else:
                 cmd = os.link
-
             try:
                 cmd(source, os.path.join(where, "{%s}%s" % (uuid_, ext)))
             except EnvironmentError as e:
@@ -299,7 +283,6 @@ class LinkUUIDRegistry(dict):
                     print("LinkUUIDRegistry: link failed:", e)
             except shutil.Error:
                 pass
-
 
     def update(self, where, copy=False):
         """Update the hard links in the links directory."""
@@ -309,7 +292,6 @@ class LinkUUIDRegistry(dict):
         # links directory itself.
         self._purge(where)
         self.link_dir = where
-
 
     def get_link_filename(self, uuid_):
         """Check in the links directory for a specific UUID filename."""

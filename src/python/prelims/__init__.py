@@ -32,6 +32,7 @@ import glob
 import uuid
 import datetime
 import subprocess
+import gettext
 from functools import partial
 from collections import defaultdict
 
@@ -39,7 +40,7 @@ import dbus
 import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 DBusGMainLoop(set_as_default=True)
-import glib
+from gi.repository import GLib as glib
 
 from idjc import FGlobs
 from idjc import PGlobs
@@ -47,10 +48,8 @@ from ..utils import Singleton
 from ..utils import PathStr
 
 
-import gettext
 t = gettext.translation(FGlobs.package_name, FGlobs.localedir, fallback=True)
 _ = t.gettext
-
 
 
 # The name of the default profile.
@@ -68,11 +67,9 @@ class ArgumentParserError(Exception):
     pass
 
 
-
 class ArgumentParser(argparse.ArgumentParser):
     def error(self, text):
         raise ArgumentParserError(text)
-
 
     def exit_with_message(self, text):
         """This is just error on the superclass."""
@@ -80,12 +77,8 @@ class ArgumentParser(argparse.ArgumentParser):
         super(ArgumentParser, self).error(text)
 
 
-
-class ArgumentParserImplementation(object):
+class ArgumentParserImplementation(metaclass=Singleton):
     """To parse the command line arguments, if any."""
-
-    __metaclass__ = Singleton
-
 
     def __init__(self, args=None, description=None, epilog=None):
         if args is None:
@@ -96,8 +89,8 @@ class ArgumentParserImplementation(object):
         if description is None:
             description = PGlobs.app_longform
 
-        ap = self._ap = ArgumentParser(description=description, epilog=epilog,
-                                                                add_help=False)
+        ap = self._ap = ArgumentParser(description=description,
+                                       epilog=epilog, add_help=False)
         ap.add_argument("-h", "--help", action="help", help=_('show this help '
         'message and exit -- additional help is available on each of the '
         'sub-commands for example: "%(prog)s run --help" shows the help '
@@ -106,7 +99,7 @@ class ArgumentParserImplementation(object):
                 version=FGlobs.package_name + " " + FGlobs.package_version,
                 # TC: a command line option help string.
                 help=_("show the version number and exit"))
-        sp = self._sp = ap.add_subparsers()
+        sp = self._sp = ap.add_subparsers(required=True)
         # TC: a command line option help string.
 
         sp_run = sp.add_parser("run", add_help=False, help=_("run the main "
@@ -246,42 +239,35 @@ class ArgumentParserImplementation(object):
                 help=_('show this help message and exit'))
         sp_ls.add_argument("--dummyarg", dest="ls", help=argparse.SUPPRESS)
 
-
     def parse_args(self):
         try:
             return self._ap.parse_args(self._args)
-        except ArgumentParserError as e:
+        except TypeError as e:
             try:
-                for cmd in self._sp.choices.iterkeys():
+                for cmd in self._sp.choices.keys():
                     if cmd in self._args:
                         raise
                 return self._ap.parse_args(self._args + ["run"])
             except ArgumentParserError:
                 self._ap.exit_with_message(str(e))
 
-
     def error(self, text):
         self._ap.exit_with_message(text)
-
 
     def exit(self, status=0, message=None):
         self._ap.exit(status, message)
 
 
-
 class DBusUptimeReporter(dbus.service.Object):
     """Supply uptime to other idjc instances."""
 
-
     interface_name = PGlobs.dbus_bus_basename + ".profile"
     obj_path  = PGlobs.dbus_objects_basename + "/uptime"
-
 
     def __init__(self):
         self._uptime_cache = defaultdict(float)
         self._interface_cache = {}
         # Defer base class initialisation.
-
 
     @dbus.service.method(interface_name, out_signature="d")
     def get_uptime(self):
@@ -289,11 +275,9 @@ class DBusUptimeReporter(dbus.service.Object):
 
         return self._get_uptime()
 
-
     def activate_for_profile(self, bus_name, get_uptime):
         self._get_uptime = get_uptime
         dbus.service.Object.__init__(self, bus_name, self.obj_path)
-
 
     def get_uptime_for_profile(self, profile):
         """Ask and return the uptime of an active profile.
@@ -306,10 +290,8 @@ class DBusUptimeReporter(dbus.service.Object):
         Supports synchronous mode in the absence of an event loop.
         """
 
-
         def rh(retval):
             self._uptime_cache[profile] = retval
-
 
         def eh(exception):
             try:
@@ -320,7 +302,6 @@ class DBusUptimeReporter(dbus.service.Object):
                 del self._interface_cache[profile]
             except KeyError:
                 pass
-
 
         try:
             interface = self._interface_cache[profile]
@@ -344,11 +325,9 @@ class DBusUptimeReporter(dbus.service.Object):
             return interface.get_uptime()
 
 
-
 # Profile length limited for practical reasons. For more descriptive
 # purposes the nickname parameter was created.
 MAX_PROFILE_LENGTH = 18
-
 
 
 def profile_name_valid(p):
@@ -358,7 +337,6 @@ def profile_name_valid(p):
     except (TypeError, ValueError):
         return False
     return len(p) <= MAX_PROFILE_LENGTH
-
 
 
 class ProfileError(Exception):
@@ -372,10 +350,8 @@ class ProfileError(Exception):
         self.gui_text = str2
 
 
-
 def profileclosure(cmd, name):
     """A factory function of sorts."""
-
 
     busbase = PGlobs.dbus_bus_basename
     def inner(profname):
@@ -384,23 +360,18 @@ def profileclosure(cmd, name):
     return staticmethod(inner)
 
 
-
-class ProfileManager(object):
+class ProfileManager(metaclass=Singleton):
     """The profile gives each application instance a unique identity.
 
     This identity extends to the config file directory if present,
     to the JACK application ID, to the DBus bus name.
     """
 
-    __metaclass__ = Singleton
-
-
     _profile = _dbus_bus_name = _profile_dialog = _init_time = None
     _iconpathname = PGlobs.default_icon
 
     _textoptionals = ("nickname", "description")
     _optionals = ("icon",) + _textoptionals
-
 
     def __init__(self):
         ap = ArgumentParserImplementation()
@@ -472,7 +443,7 @@ class ProfileManager(object):
                 if not profile_name_valid(profile):
                     ap.error(_('profile name is bad'))
 
-                if profile not in os.walk(PGlobs.profile_dir).next()[1]:
+                if profile not in next(os.walk(PGlobs.profile_dir))[1]:
                     ap.error(_('profile %s does not exist') % profile)
 
                 if self._profile_has_owner(profile):
@@ -517,22 +488,17 @@ class ProfileManager(object):
                 ap.error(_("failed to grab bus name -- "
                     "another session by the same name appears to be running"))
 
-
-
     @property
     def profile(self):
         return self._profile
-
 
     @property
     def iconpathname(self):
         return self._iconpathname
 
-
     @property
     def dbus_bus_name(self):
         return self._dbus_bus_name
-
 
     @property
     def basedir(self):
@@ -543,13 +509,11 @@ class ProfileManager(object):
         else:
             return PGlobs.profile_dir / self.profile
 
-
     @property
     def session_type(self):
         """Session mode: L0 for none, L1 for Ladish L1 mode."""
 
         return self._session_type
-
 
     @property
     def session_name(self):
@@ -564,14 +528,12 @@ class ProfileManager(object):
         
         return self._session_uuid
 
-
     @property
     def ports_pathname(self):
         """Where to save jack session to and load it from."""
 
         return self.basedir / ("ports-%s-%s" % (
                                         self.session_type, self.session_name))
-
 
     @property
     def title_extra(self):
@@ -590,7 +552,6 @@ class ProfileManager(object):
             return "  (%s)" % _('session={type}:{name}').format(
                                 type=self.session_type, name=self.session_name)
 
-
     @property
     def autoloadprofilename(self):
         """Which profile would automatically load if given the chance?"""
@@ -600,17 +561,15 @@ class ProfileManager(object):
             return None
 
         try:
-            profiledirs = os.walk(PGlobs.profile_dir).next()[1]
+            profiledirs = next(os.walk(PGlobs.profile_dir))[1]
         except (EnvironmentError, StopIteration):
             return None
 
         return al_profile if al_profile in profiledirs else None
 
-
     @property
     def profile_dialog(self):
         return self._profile_dialog
-
 
     def get_uptime(self):
         if self._init_time is not None:
@@ -618,11 +577,9 @@ class ProfileManager(object):
         else:
             return 0.0
 
-
     @staticmethod
     def _parse_session(ap, args):
         """User supplied session details are parsed and checked for validity."""
-
 
         def profile_check():
             if not profile_name_valid(args.profile[0]):
@@ -725,7 +682,6 @@ class ProfileManager(object):
         return session_type, PathStr(session_dir), session_name, \
                             None if session_uuid is None else str(session_uuid)
 
-
     def _autoloadprofilename(self):
         """Just the file contents without checking."""
 
@@ -736,7 +692,6 @@ class ProfileManager(object):
         except IOError:
             return None
         return al_profile
-
 
     def _auto(self, dialog, profile):
         if dialog is None and profile != default and not \
@@ -759,7 +714,6 @@ class ProfileManager(object):
             if dialog is None:
                 raise ProfileError(str(e), None)
 
-
     def _noauto(self):
         try:
             with open(PGlobs.autoload_profile_pathname, "r+") as f:
@@ -767,7 +721,6 @@ class ProfileManager(object):
                 f.truncate()
         except IOError:
             pass
-
 
     def _cb_edit_profile(self, dialog, newprofile, oldprofile, *opts):
         busses = []
@@ -809,7 +762,6 @@ class ProfileManager(object):
         else:
             dialog.destroy_new_profile_dialog()
 
-
     def _delete_profile(self, dialog, profiles):
         if isinstance(profiles, str):
             profiles = [profiles]
@@ -840,7 +792,6 @@ class ProfileManager(object):
             if profile == default:
                 self._generate_default_profile()
 
-
     def _choose_profile(self, dialog, profile, verbose=False):
         if dialog.profile is None:
             try:
@@ -864,7 +815,6 @@ class ProfileManager(object):
                   profile))
             subprocess.Popen([FGlobs.bindir / FGlobs.package_name,
                 "run", "-p", profile], close_fds=True)
-
 
     def _generate_profile(self, newprofile, template=None, **kwds):
         if PGlobs.profile_dir is not None:
@@ -933,7 +883,6 @@ class ProfileManager(object):
                                         _("could not write file %s") + fname,
                                         _("Could not write file %s.") % fname)
 
-
                 dest = PGlobs.profile_dir / newprofile
                 try:
                     shutil.copytree(tmp, dest)
@@ -954,21 +903,19 @@ class ProfileManager(object):
                 except EnvironmentError:
                     pass
 
-
     def _generate_default_profile(self):
         self._generate_profile(default, description=_("The default profile"))
-
 
     def _profile_data(self):
         a = self._autoloadprofilename()
         d = PGlobs.profile_dir
         try:
-            profdirs = os.walk(d).next()[1]
+            profdirs = next(os.walk(d))[1]
         except (EnvironmentError, StopIteration):
             return
         for profname in profdirs:
             if profile_name_valid(profname):
-                files = os.walk(d / profname).next()[2]
+                files = next(os.walk(d / profname))[2]
                 rslt = {"profile": profname}
                 for each in self._optionals:
                     try:
@@ -982,7 +929,6 @@ class ProfileManager(object):
                                                                     profname))
                 rslt["auto"] = (1 if a == profname else 0)
                 yield rslt
-
 
     def _ls(self):
         table = []
@@ -1000,13 +946,11 @@ class ProfileManager(object):
             print("{1} {0:{5}} {2:>16} {3} {4}".format(*(tuple(row) +
                   (MAX_PROFILE_LENGTH,))))
 
-
     _profile_has_owner = profileclosure(dbus.SessionBus().name_has_owner,
                             "_profile_has_owner")
 
     _grab_bus_name_for_profile = profileclosure(partial(
         dbus.service.BusName, do_not_queue=True), "_grab_bus_name_for_profile")
-
 
     @staticmethod
     def _grab_profile_filetext(profile, filename):
@@ -1015,7 +959,6 @@ class ProfileManager(object):
                 return f.readline().strip()
         except EnvironmentError:
             return None
-
 
     def _get_profile_dialog(self):
         from .profiledialog import ProfileDialog

@@ -118,22 +118,22 @@ which you typically want the library development packages whose names carry the 
       <th>Project name</th><th>Version</th><th>Comment</th>
    </tr>
    <tr>
-      <td><a href="https://sourceforge.net/projects/libshoutidjc.idjc.p/files/libshout-idjc-2.4.2.tar.gz/download/">libshout-idjc</a></td><td>2.4.2</td><td>Required&#8212;A specially modified version of libshout</td>
+      <td><a href="https://sourceforge.net/projects/libshoutidjc.idjc.p/files/libshout-idjc-2.4.5.tar.gz/download/">libshout-idjc</a></td><td>2.4.5</td><td>Required&#8212;A specially modified version of libshout</td>
    </tr>
    <tr>
-      <td><a href="http://www.python.org/">Python</a></td><td>2.7+,&nbsp;not&nbsp;3</td><td>Required&#8212;probably installed already</td>
+      <td><a href="https://www.python.org/">Python</a></td><td>3.7+</td><td>Required&#8212;probably installed already</td>
    </tr>
    <tr>
-      <td><a href="http://code.google.com/p/mutagen/">mutagen</a></td><td>1.18+</td><td>Required</td>
+      <td><a href="https://github.com/quodlibet/mutagen/">mutagen</a></td><td>1.44+</td><td>Required</td>
    </tr>
    <tr>
       <td><a href="http://www.jackaudio.org/">Jack Audio Connection Kit</a></td><td>0.116.0+</td><td>Required&#8212;need library and server</td>
    </tr>
    <tr>
-      <td><a href="http://www.pygtk.org/">PyGTK</a></td><td>2.18+</td><td>Required</td>
+      <td><a href="https://pygobject.readthedocs.io/en/latest/">PyGObject</a></td><td>3.36+</td><td>Required</td>
    </tr>
    <tr>
-      <td><a href="http://www.vorbis.com/">vorbis-tools</a></td><td>1.2.0+</td><td>Required</td>
+      <td><a href="https://xiph.org/vorbis/">vorbis-tools</a></td><td>1.2.0+</td><td>Required</td>
    </tr>
    <tr>
       <td><a href="http://www.mega-nerd.com/libsndfile/">libsndfile</a></td><td>1.0.12+</td><td>Required</td>
@@ -142,34 +142,32 @@ which you typically want the library development packages whose names carry the 
       <td><a href="http://www.mega-nerd.com/SRC/">libsamplerate</a></td><td>0.1.4+</td><td>Required</td>
    </tr>
    <tr>
-      <td><a href="http://www.gtk.org/download.html">GLib2</a></td><td>2.0.0+</td><td>Required</td>
+      <td><a href="https://developer.gnome.org/glib/">GLib2</a></td><td>2.0.0+</td><td>Required</td>
    </tr>
    <tr>
-      <td><a href="http://www.mpg123.de/">mpg123</a></td><td>1.13+</td><td>Recommended&#8212;for mp2/mp3 playback</td>
+      <td><a href="https://www.mpg123.de/">mpg123</a></td><td>1.13+</td><td>Recommended&#8212;for mp2/mp3 playback</td>
    </tr>
    <tr>
-      <td><a href="http://www.twolame.org/">TwoLAME</a></td><td>0.3+</td><td>Recommended&#8212;for streaming/recording in the mp2 format</td>
+      <td><a href="https://www.twolame.org/">TwoLAME</a></td><td>0.3+</td><td>Recommended&#8212;for streaming/recording in the mp2 format</td>
    </tr>
    <tr>
-      <td><a href="http://lame.sourceforge.net/">Lame</a></td><td>3.97+</td><td>Recommended&#8212;for streaming/recording in the mp3 format</td>
+      <td><a href="https://lame.sourceforge.io/">Lame</a></td><td>3.97+</td><td>Recommended&#8212;for streaming/recording in the mp3 format</td>
    </tr>
    <tr>
-      <td><a href="http://www.ffmpeg.org/">FFmpeg's libav&hellip;</a></td><td>3.3.5+</td><td>Recommended&#8212;for mp4/m4a, ape, mpc, aac(+)</td>
+      <td><a href="https://www.ffmpeg.org/">FFmpeg</a></td><td>4.0.6+</td><td>Recommended&#8212;for mp4/m4a, ape, mpc, aac(+)</td>
    </tr>
    <tr>
-      <td><a href="http://flac.sourceforge.net/">FLAC</a></td><td>1.1.3+</td><td>Recommended&#8212;for FLAC playback, recording, and streaming</td>
+      <td><a href="https://xiph.org/flac/">FLAC</a></td><td>1.1.3+</td><td>Recommended&#8212;for FLAC playback, recording, and streaming</td>
    </tr>
    <tr>
-      <td><a href="http://www.speex.org/">Speex</a></td><td>1.2rc1+</td><td>Recommended&#8212;for Speex playback and streaming</td>
+      <td><a href="https://www.speex.org/">Speex</a></td><td>1.2rc1+</td><td>Recommended&#8212;for Speex playback and streaming</td>
    </tr>
    <tr>
-      <td><a href="http://www.opus-codec.org/">Opus</a></td><td>1.0+</td><td>Recommended&#8212;for Opus playback and streaming</td>
+      <td><a href="https://www.opus-codec.org/">Opus</a></td><td>1.0+</td><td>Recommended&#8212;for Opus playback and streaming</td>
    </tr>
 </table>
-<p>For Ubuntu users, this command should be enough to satisfy nearly all of the above.</p>
-<pre class="ie6-one-line-pre">$ sudo apt-get install build-essential libc6-dev libglib2.0-dev libjack-dev jackd libvorbis-dev libsamplerate0-dev libsndfile1-dev python-gtk2-dev libmpg123-dev libavcodec-dev libavformat-dev libtwolame-dev libmp3lame-dev libflac-dev python-mutagen libspeex-dev</pre>
-<p>For Fedora users, use this instead.</p>
-<pre class="ie6-one-line-pre">$ su -c "yum install gcc-c++ libvorbis-devel glib2-devel libsamplerate-devel libsndfile-devel jack-audio-connection-kit-devel pygtk2-devel libmpg123-devel lame-devel twolame-devel flac-devel ffmpeg-devel speex-devel python-mutagen opus-devel"</pre>
+<p>For Linux Mint 20.1 users the following command installs the dependencies.</p>
+<pre class="ie6-one-line-pre">$ sudo apt install build-essential libc6-dev libglib2.0-dev jackd2 libjack-jackd2-dev libvorbis-dev libsamplerate0-dev libsndfile1-dev python-gi-dev libmpg123-dev libavcodec-dev libavformat-dev libtwolame-dev libmp3lame-dev libflac-dev python3-mutagen libspeex-dev</pre>
 <p>If during the execution of the above command you are asked whether to configure your system for JACK/realtime the sensible choice is yes.</p>
 
 <h4>Obtaining the IDJC source code</h4>
@@ -181,55 +179,31 @@ obtain the development sources which are only casually tested.</p>
 <pre>$ cd <span style="color:red" title="This could be correct. If not you need to specify the directory where the downloaded file currently resides.">Downloads</span>
 $ tar xzvf libshout-idjc-<span style="color:red;" title="Replace with the actual version number.">[version]</span>.tar.gz
 $ cd libshout-idjc-<span style="color:red;" title="Replace with the actual version number.">[version]</span>/
-$ ./configure CFLAGS="-O2" --prefix=/usr
-</pre>
-<ul><li><p>Fedora 64 bit only.</p>
-<pre class="inset">$ ./configure CFLAGS="-O2" --prefix=/usr --libdir=/usr/lib64</pre>
-</li></ul>
-<pre>
+$ ./configure CFLAGS="-O2" --prefix=/usr <span style="color:green;font-style:italic" title="This option is for distributions that primarily use the /usr/lib64 directory for libraries.">--libdir=/usr/lib64</span>
 $ make
 $ sudo make install
 $ sudo ldconfig</pre>
-
-<p>Navigate to <a href="http://sourceforge.net/projects/idjc/">http://sourceforge.net/projects/idjc/</a>.</p>
+<p>Some distributions primarily keep 64 bit libraries in a directory called lib64 and if that is the case the libdir directive must be applied (green italic text above and further down the page).</p>
+<p>Note that prefix is set to /usr due to some Linux distributions not having a nicely configured /etc/ld.so.conf file.</p>
+<p>Navigate to <a href="https://sourceforge.net/projects/idjc/">https://sourceforge.net/projects/idjc/</a>.</p>
 <p>Hit the big green <i>Download</i> button and wait for the download to finish. Make a note of the version number.</p>
 <pre>$ cd <span style="color:red" title="This could be correct. If not you need to specify the directory where the downloaded file currently resides.">Downloads</span>
 $ tar xzvf idjc-<span style="color:red;" title="Replace with the actual version number.">[version]</span>.tar.gz
 $ cd idjc-<span style="color:red;" title="Replace with the actual version number.">[version]</span>/
-$ ./configure CFLAGS="-O2" --prefix=/usr
-</pre>
-<ul><li><p>Fedora 64 bit only.</p>
-<pre class="inset">$ ./configure CFLAGS="-O2" --prefix=/usr --libdir=/usr/lib64</pre>
-</li></ul>
-<pre>
+$ ./configure CFLAGS="-O2" --prefix=/usr <span style="color:green;font-style:italic" title="This option is for distributions that primarily use the /usr/lib64 directory for libraries.">--libdir=/usr/lib64</span>
 $ make
 $ sudo make install</pre>
 
 <h5>Option 2: Build from the development sources</h5>
-<p>Build dependencies for Ubuntu users.</p>
-<pre>$ sudo apt-get install git-core autoconf libtool autopoint imagemagick</pre>
-<p>For Fedora users.</p>
-<pre>$ su -c "yum install git-core autoconf libtool gettext-devel ImageMagick"</pre>
-<p>The build process.</p>
+<p>First install the latest libshout-idjc as per option 1 above.</p>
+<p>Install the additional build dependencies. For Linux Mint 20.1 that would be the following line.</p>
+<pre>$ sudo apt install git-core autoconf libtool-bin autopoint imagemagick</pre>
+<p>Then type the following.</p>
 <pre>
 $ git clone git://idjc.git.sourceforge.net/gitroot/idjc/idjc
 $ cd idjc/
 $ ./bootstrap
-$ cd libshout-idjc
-$ ./configure CFLAGS="-O2" --prefix=/usr</pre>
-<ul><li><p>Fedora 64 bit only.</p>
-<pre class="inset">$ ./configure CFLAGS="-O2" --prefix=/usr --libdir=/usr/lib64</pre>
-</li></ul>
-<pre>
-$ make
-$ sudo make install
-$ sudo ldconfig
-$ cd ..
-$ ./configure CFLAGS="-O2" --prefix=/usr</pre>
-<ul><li><p>Fedora 64 bit only.</p>
-<pre class="inset">$ ./configure CFLAGS="-O2" --prefix=/usr --libdir=/usr/lib64</pre>
-</li></ul>
-<pre>
+$ ./configure CFLAGS="-O2" --prefix=/usr <span style="color:green;font-style:italic" title="This option is for distributions that primarily use the /usr/lib64 directory for libraries.">--libdir=/usr/lib64</span>
 $ make
 $ sudo make install
 </pre>
@@ -239,7 +213,7 @@ $ sudo make install
 
 <h4>Finally</h4>
 <p>At this stage it's installed but see the <a href="install_first_run.html">First run</a> section
-as further configuration is very likely needed.</p>
+to help iron out potential system configuration problems.</p>
                   </td>
                </tr>
             </table>

@@ -47,14 +47,13 @@ struct mic
     float mrcm;       /* audio right channel with muting */
 
     /* aux specific output */
-    float aunp;       /* barely processed audio without muting */
-    float aunpm;      /* barely processed audio with muting */
-    float aunpmdj;    /* barely processed audio for the dj mix */
     float alrc;       /* both audio channels without muting */
     float alc;        /* audio left channel without muting */
     float arc;        /* audio right channel without muting */
     float alcm;       /* audio left channel with muting */
     float arcm;       /* audio right channel with muting */
+    float alcmdj;     /* muteable audio left channel for dj mix */
+    float arcmdj;     /* muteable audio right channel for dj mix */
     
     /* control inputs */
     int open;        /* mic open/close */

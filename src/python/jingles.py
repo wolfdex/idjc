@@ -1,5 +1,5 @@
 #   jingles.py: Jingles window and players -- part of IDJC.
-#   Copyright 2012 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#   Copyright 2012-2020 Stephen Fairchild (s-fairchild@users.sourceforge.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -22,11 +22,15 @@ import time
 import gettext
 import json
 import uuid
-
-import gtk
-import gobject
 import itertools
 import urllib
+
+import gi
+from gi.repository import Gtk
+from gi.repository import Gdk
+from gi.repository import GdkPixbuf
+from gi.repository import GObject
+from gi.repository import Pango
 
 from idjc import *
 from .playergui import *
@@ -49,22 +53,15 @@ link_uuid_reg = LinkUUIDRegistry()
 LED = LEDDict(9)
 
 
-class Effect(gtk.HBox):
+class Effect(Gtk.HBox):
     """A trigger button for an audio effect or jingle.
     
     Takes a numeric parameter for identification. Also includes numeric I.D.,
     L.E.D., stop, and config button.
     """
 
-    dndsources = (("IDJC_EFFECT_BUTTON", gtk.TARGET_SAME_APP, 6),)
-
-    dndtargets = (  # Drag and drop source target specs.
-        ('text/plain', 0, 1),
-        ('TEXT', 0, 2),
-        ('STRING', 0, 3),
-        ('text/uri-list', 0, 4),
-        ("IDJC_EFFECT_BUTTON", gtk.TARGET_SAME_APP, 6))
-
+    CONFIG_TARGET = Gdk.Atom.intern('application/x-idjc-effect', False)
+    
     def __init__(self, num, others, parent):
         self.num = num
         self.others = others
@@ -73,117 +70,123 @@ class Effect(gtk.HBox):
         self.uuid = str(uuid.uuid4())
         self._repeat_works = False
             
-        gtk.HBox.__init__(self)
+        Gtk.HBox.__init__(self)
         self.set_border_width(2)
         self.set_spacing(3)
         
-        label = gtk.Label("%02d" % (num + 1))
+        label = Gtk.Label(f"{num + 1:02d}")
         self.pack_start(label, False)
         
         self.clear = LED["clear"].copy()
         self.green = LED["green"].copy()
         
-        self.led = gtk.Image()
+        self.led = Gtk.Image()
         self.led.set_from_pixbuf(self.clear)
         self.pack_start(self.led, False)
         self.old_ledval = 0
         
-        image = gtk.image_new_from_file(PGlobs.themedir / "stop.png")
-        image.set_padding(4, 4)
-        self.stop = gtk.Button()
+        image = Gtk.Image.new_from_file(PGlobs.themedir / "stop.png")
+        self.stop = Gtk.Button()
         self.stop.set_image(image)
         self.pack_start(self.stop, False)
         self.stop.connect("clicked", self._on_stop)
         set_tip(self.stop, _('Stop'))
         
-        self.trigger = gtk.Button()
-        self.trigger.set_size_request(80, -1)
+        self.trigger = Gtk.Button()
+        self.trigger.set_size_request(80, 0)
         self.pack_start(self.trigger)
-        self.trigger_label = gtk.Label()
-        self.trigger.add(self.trigger_label)
 
-        pvbox = gtk.VBox()
-        self.progress = gtk.ProgressBar()
-        pvbox.pack_start(self.progress, padding=1)
-        self.progress.set_orientation(gtk.PROGRESS_BOTTOM_TO_TOP)
-        self.progress.set_size_request(5, 0)
-        self.pack_start(pvbox, False)
+        self.progress = Gtk.ProgressBar()
+        self.progress.set_size_request(20, 0)
+        self.progress.set_orientation(Gtk.Orientation.HORIZONTAL)
+
+        self.trigger_label = Gtk.Label()
+        self.trigger_label.set_ellipsize(Pango.EllipsizeMode.END)
+
+        vbox = Gtk.VBox()
+        vbox.add(self.trigger_label)
+        vbox.add(self.progress)
+        self.trigger.add(vbox)
+
         self.trigger.connect("clicked", self._on_trigger)
-        self.trigger.drag_dest_set(gtk.DEST_DEFAULT_ALL,
-            self.dndtargets, gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_COPY)
+        self.trigger.drag_dest_set(Gtk.DestDefaults.ALL, None, Gdk.DragAction.COPY)
+        target_list = Gtk.TargetList()
+        target_list.add_uri_targets(0)
+        target_list.add_text_targets(0)
+        target_list.add(self.CONFIG_TARGET, Gtk.TargetFlags.SAME_APP, 1)
+        self.trigger.drag_dest_set_target_list(target_list)
+
         self.trigger.connect("drag-data-received", self._drag_data_received)
         set_tip(self.trigger, _('Play'))
         
-        self.repeat = gtk.ToggleButton()
-        image = gtk.Image()
-        pb = gtk.gdk.pixbuf_new_from_file_at_size(PGlobs.themedir / "repeat.png", 23, 19)
+        self.repeat = Gtk.ToggleButton()
+        image = Gtk.Image()
+        pb = GdkPixbuf.Pixbuf.new_from_file_at_size(PGlobs.themedir / "repeat.png", 23, 19)
         image.set_from_pixbuf(pb)
         self.repeat.add(image)
         image.show()
         self.pack_start(self.repeat, False)
         set_tip(self.repeat, _('Repeat'))
 
-        image = gtk.image_new_from_stock(gtk.STOCK_PROPERTIES,
-                                                            gtk.ICON_SIZE_MENU)
-        self.config = gtk.Button()
+        image = Gtk.Image.new_from_stock(Gtk.STOCK_PROPERTIES,
+                                                            Gtk.IconSize.MENU)
+        self.config = Gtk.Button()
         self.config.set_image(image)
         self.pack_start(self.config, False)
         self.config.connect("clicked", self._on_config)
-        self.config.drag_source_set(gtk.gdk.BUTTON1_MASK,
-            self.dndsources, gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_COPY)
+        self.config.drag_source_set(Gdk.ModifierType.BUTTON1_MASK, None, Gdk.DragAction.COPY)
+        target_list = Gtk.TargetList()
+        target_list.add(self.CONFIG_TARGET, Gtk.TargetFlags.SAME_APP, 1)
+        self.config.drag_source_set_target_list(target_list)
+
         self.config.connect("drag-begin", self._drag_begin)
         self.config.connect("drag-data-get", self._drag_get_data)
-        self.config.connect("drag-end", self._drag_end)
         set_tip(self.config, _('Configure'))
 
         self.dialog = EffectConfigDialog(self, parent.window)
         self.dialog.connect("response", self._on_dialog_response)
-        self.dialog.emit("response", gtk.RESPONSE_NO)
+        self.dialog.emit("response", Gtk.ResponseType.NO)
         self.timeout_source_id = None
         self.interlude = IDJC_Media_Player(None, None, parent)
         self.effect_length = 0.0
         # Create the widget that will be used in the tab
-        self.tabwidget = gtk.HBox()
+        self.tabwidget = Gtk.HBox()
         self.tabwidget.set_spacing(3)
-        sep = gtk.VSeparator()
+        sep = Gtk.VSeparator()
         self.tabwidget.pack_start(sep)
-        vb = gtk.VBox()
+        vb = Gtk.VBox()
         self.tabwidget.pack_start(vb)
-        hb = gtk.HBox()
+        hb = Gtk.HBox()
         hb.set_spacing(3)
-        self.tabeffectname = gtk.Label()
-        self.tabeffecttime = gtk.Label()
+        self.tabeffectname = Gtk.Label()
+        self.tabeffecttime = Gtk.Label()
         hb.pack_start(self.tabeffectname)
         hb.pack_start(self.tabeffecttime)
         vb.pack_start(hb)
-        self.tabeffectprog = gtk.ProgressBar()
-        self.tabeffectprog.set_size_request(-0, 3)
+        self.tabeffectprog = Gtk.ProgressBar()
+        self.tabeffectprog.set_size_request(0, 5)
         vb.pack_start(self.tabeffectprog)
         self.tabwidget.show_all()
 
     def _drag_begin(self, widget, context):
-        widget.drag_highlight()
-        context.set_icon_stock(gtk.STOCK_PROPERTIES, -5, -5)
+        widget.drag_source_set_icon_stock(Gtk.STOCK_PROPERTIES)
         
-    def _drag_end(self, widget, context):
-        widget.drag_unhighlight()
-
     def _drag_get_data(self, widget, context, selection, target_id, etime):
-        selection.set(selection.target, 8, str(self.num))
+        selection.set(selection.get_target(), 8, str(self.num))
         return True
 
     def _drag_data_received(self, widget, context, x, y, dragged, info, etime):
-        if context.targets == ["IDJC_EFFECT_BUTTON"]:
-            other = self.others[int(dragged.data)]
+        if info == 1:
+            other = self.others[int(dragged.get_data())]
             if other != self:
                 self.stop.clicked()
                 other.stop.clicked()
                 self._swap(other)
                 return True
         else:
-            data = dragged.data.splitlines()
-            if len(data) == 1 and data[0].startswith("file://"):
-                pathname = urllib.unquote(data[0][7:])
+            data = dragged.get_data().splitlines()
+            if len(data) == 1 and data[0].startswith(b"file://"):
+                pathname = urllib.request.unquote(data[0][7:].decode('utf-8'))
                 title = self.interlude.get_media_metadata(pathname).title
                 if title:
                     self.stop.clicked()
@@ -207,7 +210,7 @@ class Effect(gtk.HBox):
 
         self.dialog.button_entry.set_text(button_text)
         self.dialog.gain_adj.set_value(level)
-        self._on_dialog_response(self.dialog, gtk.RESPONSE_ACCEPT, pathname)
+        self._on_dialog_response(self.dialog, Gtk.ResponseType.ACCEPT, pathname)
         
     def _on_config(self, widget):
         self.stop.clicked()
@@ -230,19 +233,18 @@ class Effect(gtk.HBox):
                 self.tabeffecttime.set_text('0.0')
                 self.tabeffectprog.set_fraction(0.0)
                 self.approot.jingles.nb_effects_box.pack_start(self.tabwidget)
+                self.approot.jingles.nb_effects_box.show_all()
                 self.approot.effect_started(self.trigger_label.get_text(),
-                                                    self.pathname, self.num)
+                                            self.pathname, self.num)
             else: # Restarted the effect
                 self.effect_start = time.time()
             self.approot.mixer_write(
-                            "EFCT=%d\nPLRP=%s\nRGDB=%f\nACTN=playeffect\nend\n" % (
-                            self.num, self.pathname, self.level))
-            self.trigger_label.set_use_markup(True)
-            self.trigger_label.set_label("<b>" + self.trigger_label.get_text() + "</b>")
+                f"EFCT={self.num}\nPLRP={self.pathname}\n"
+                f"RGDB={self.level}\nACTN=playeffect\nend\n")
 
     def _on_stop(self, widget):
         self._repeat_works = False
-        self.approot.mixer_write("EFCT=%d\nACTN=stopeffect\nend\n" % self.num)
+        self.approot.mixer_write(f"EFCT={self.num}\nACTN=stopeffect\nend\n")
 
     @threadslock
     def _progress_timeout(self):
@@ -255,7 +257,7 @@ class Effect(gtk.HBox):
         else:
             self.progress.set_fraction(ratio)
             self.tabeffectprog.set_fraction(ratio)
-            self.tabeffecttime.set_text("%4.1f" % (self.effect_length - played))
+            self.tabeffecttime.set_text(f"{self.effect_length - played:4.1f}")
         return True
 
     def _stop_progress(self):
@@ -267,15 +269,22 @@ class Effect(gtk.HBox):
             self.approot.effect_stopped(self.num)
 
     def _on_dialog_response(self, dialog, response_id, pathname=None):
-        if response_id in (gtk.RESPONSE_ACCEPT, gtk.RESPONSE_NO):
+        if response_id in (Gtk.ResponseType.ACCEPT, Gtk.ResponseType.NO):
             self.pathname = pathname or dialog.get_filename()
             text = dialog.button_entry.get_text() if self.pathname and \
                                         os.path.isfile(self.pathname) else ""
-            self.trigger_label.set_text(text.strip())
+            text = text.strip()
+            #self.trigger_label.set_text(text)
+            if "<" in text or ">" in text:  # These characters break Pango markup.
+                self.trigger_label.set_use_markup(False)
+                self.trigger_label.set_text(text)
+            else:
+                self.trigger_label.set_use_markup(True)
+                self.trigger_label.set_label(text)
             self.level = dialog.gain_adj.get_value()
             
             sens = self.pathname is not None and os.path.isfile(self.pathname)
-            if response_id == gtk.RESPONSE_ACCEPT and pathname is not None:
+            if response_id == Gtk.ResponseType.ACCEPT and pathname is not None:
                 self.uuid = str(uuid.uuid4())
             self.effect_length = 0.0 # Force effect length to be read again.
 
@@ -288,7 +297,8 @@ class Effect(gtk.HBox):
             self.pathname = PM.basedir / link
             if not self.dialog.get_visible():
                 self.dialog.set_filename(self.pathname)
-        return json.dumps([self.trigger_label.get_text(), (link or self.pathname), self.level, self.uuid])
+        return json.dumps([self.trigger_label.get_text(),
+                          (link or self.pathname), self.level, self.uuid])
 
     def unmarshall(self, data):
         try:
@@ -307,7 +317,7 @@ class Effect(gtk.HBox):
             self.dialog.set_filename(pathname)
         self.dialog.button_entry.set_text(label)
         self.dialog.gain_adj.set_value(level)
-        self._on_dialog_response(self.dialog, gtk.RESPONSE_ACCEPT, pathname)
+        self._on_dialog_response(self.dialog, Gtk.ResponseType.ACCEPT, pathname)
         self.pathname = pathname
 
     def update_led(self, val):
@@ -320,11 +330,17 @@ class Effect(gtk.HBox):
             elif not val:
                 self._stop_progress()
 
+            if self.trigger_label.get_use_markup():
+                if val:
+                    self.trigger_label.set_label(f"<b>{self.trigger_label.get_text()}</b>")
+                else:
+                    self.trigger_label.set_label(self.trigger_label.get_text())
 
-class EffectConfigDialog(gtk.FileChooserDialog):
+
+class EffectConfigDialog(Gtk.FileChooserDialog):
     """Configuration dialog for an Effect."""
 
-    file_filter = gtk.FileFilter()
+    file_filter = Gtk.FileFilter()
     file_filter.set_name(_('Supported media'))
     for each in supported.media:
         if each not in (".cue", ".txt"):
@@ -332,32 +348,32 @@ class EffectConfigDialog(gtk.FileChooserDialog):
             file_filter.add_pattern("*" + each.upper())
     
     def __init__(self, effect, window):
-        gtk.FileChooserDialog.__init__(self, _('Effect %d Config') % (effect.num + 1),
+        Gtk.FileChooserDialog.__init__(self, _(f'Effect {effect.num + 1} Config'),
                             window,
-                            buttons=(gtk.STOCK_CLEAR, gtk.RESPONSE_NO,
-                            gtk.STOCK_CANCEL, gtk.RESPONSE_REJECT,
-                            gtk.STOCK_OK, gtk.RESPONSE_ACCEPT))
+                            buttons=(Gtk.STOCK_CLEAR, Gtk.ResponseType.NO,
+                            Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
+                            Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
         self.set_modal(True)
 
         ca = self.get_content_area()
         ca.set_spacing(5)
-        vbox = gtk.VBox()
-        ca.pack_start(vbox, False)
+        vbox = Gtk.VBox()
+        ca.pack_start(vbox, False, True, 0)
         vbox.set_border_width(5)
         
-        hbox = gtk.HBox()
+        hbox = Gtk.HBox()
         hbox.set_spacing(3)
-        label = gtk.Label(_('Trigger text'))
+        label = Gtk.Label(_('Trigger text'))
         self.button_entry = DefaultEntry(_('No Name'))
         hbox.pack_start(label, False)
         hbox.pack_start(self.button_entry, False)
         
-        spc = gtk.HBox()
+        spc = Gtk.HBox()
         hbox.pack_start(spc, False, padding=3)
         
-        label = gtk.Label(_('Level adjustment (dB)'))
-        self.gain_adj = gtk.Adjustment(0.0, -10.0, 10.0, 0.5)
-        gain = gtk.SpinButton(self.gain_adj, 1.0, 1)
+        label = Gtk.Label(_('Level adjustment (dB)'))
+        self.gain_adj = Gtk.Adjustment(0.0, -10.0, 10.0, 0.5)
+        gain = Gtk.SpinButton.new(self.gain_adj, 1.0, 1)
         hbox.pack_start(label, False)
         hbox.pack_start(gain, False)
 
@@ -371,7 +387,7 @@ class EffectConfigDialog(gtk.FileChooserDialog):
 
     def set_filename(self, filename):
         self._stored_filename = filename
-        gtk.FileChooserDialog.set_filename(self, filename)
+        Gtk.FileChooserDialog.set_filename(self, filename)
 
     def _cb_notify_visible(self, *args):
         # Make sure filename is shown in the location box.
@@ -390,25 +406,25 @@ class EffectConfigDialog(gtk.FileChooserDialog):
 
     def _cb_response(self, dialog, response_id):
         dialog.hide()
-        if response_id == gtk.RESPONSE_NO:
+        if response_id == Gtk.ResponseType.NO:
             dialog.unselect_all()
             dialog.set_current_folder(os.path.expanduser("~"))
             self.button_entry.set_text("")
             self.gain_adj.set_value(0.0)
 
 
-class EffectBank(gtk.Frame):
+class EffectBank(Gtk.Frame):
     """A vertical stack of effects with level controls."""
 
     def __init__(self, qty, base, filename, parent, all_effects, vol_adj, mute_adj):
-        gtk.Frame.__init__(self)
+        Gtk.Frame.__init__(self)
         self.base = base
         self.session_filename = filename
         
-        hbox = gtk.HBox()
+        hbox = Gtk.HBox()
         hbox.set_spacing(1)
         self.add(hbox)
-        vbox = gtk.VBox()
+        vbox = Gtk.VBox()
         hbox.pack_start(vbox)
         
         self.effects = []
@@ -423,23 +439,23 @@ class EffectBank(gtk.Frame):
             vbox.pack_start(effect)
             count += 1
 
-        level_vbox = gtk.VBox()
+        level_vbox = Gtk.VBox()
         hbox.pack_start(level_vbox, False, padding=3)
         
-        vol_image = gtk.image_new_from_file(PGlobs.themedir / "volume2.png")
-        vol = gtk.VScale(vol_adj)
+        vol_image = Gtk.Image.new_from_file(PGlobs.themedir / "volume2.png")
+        vol = Gtk.VScale.new(vol_adj)
         vol.set_inverted(True)
         vol.set_draw_value(False)
         set_tip(vol, _('Effects volume.'))
 
-        pb = gtk.gdk.pixbuf_new_from_file(PGlobs.themedir / "headroom.png")
-        mute_image = gtk.image_new_from_pixbuf(pb)
-        mute = gtk.VScale(mute_adj)
+        pb = GdkPixbuf.Pixbuf.new_from_file(PGlobs.themedir / "headroom.png")
+        mute_image = Gtk.Image.new_from_pixbuf(pb)
+        mute = Gtk.VScale.new(mute_adj)
         mute.set_inverted(True)
         mute.set_draw_value(False)
         set_tip(mute, _('Player headroom that is applied when an effect is playing.'))
         
-        spc = gtk.VBox()
+        spc = Gtk.VBox()
         
         for widget, expand in zip((vol_image, vol, spc, mute_image, mute), 
                                     (False, True, False, False, True)):
@@ -481,10 +497,10 @@ class EffectBank(gtk.Frame):
         return (x.pathname for x in self.widgets)
 
 
-class LabelSubst(gtk.Frame):
+class LabelSubst(Gtk.Frame):
     def __init__(self, heading):
-        gtk.Frame.__init__(self, " %s " % heading)
-        self.vbox = gtk.VBox()
+        Gtk.Frame.__init__(self, f" {heading} ")
+        self.vbox = Gtk.VBox()
         self.vbox.set_border_width(2)
         self.vbox.set_spacing(2)
         self.add(self.vbox)
@@ -492,28 +508,28 @@ class LabelSubst(gtk.Frame):
         self.activedict = {}
 
     def add_widget(self, widget, ui_name, default_text):
-        frame = gtk.Frame(" %s " % default_text)
+        frame = Gtk.Frame(f" {default_text} ")
         frame.set_label_align(0.5, 0.5)
         frame.set_border_width(3)
         self.vbox.pack_start(frame)
-        hbox = gtk.HBox()
+        hbox = Gtk.HBox()
         hbox.set_spacing(3)
         frame.add(hbox)
         hbox.set_border_width(2)
-        use_supplied = gtk.RadioButton(None, _("Alternative"))
-        use_default = gtk.RadioButton(use_supplied, _('Default'))
+        use_supplied = Gtk.RadioButton.new_with_label(None, _("Alternative"))
+        use_default = Gtk.RadioButton.new_with_label_from_widget(use_supplied, _('Default'))
         self.activedict[ui_name + "_use_supplied"] = use_supplied
         hbox.pack_start(use_default, False)
         hbox.pack_start(use_supplied, False)
-        entry = gtk.Entry()
+        entry = Gtk.Entry()
         self.textdict[ui_name + "_text"] = entry
         hbox.pack_start(entry)
         
-        if isinstance(widget, gtk.Frame):
+        if isinstance(widget, Gtk.Frame):
             def set_text(new_text):
                 new_text = new_text.strip()
                 if new_text:
-                    new_text = " %s " % new_text
+                    new_text = f" {new_text} "
                 widget.set_label(new_text or None)
             widget.set_text = set_text
 
@@ -538,45 +554,48 @@ class LabelSubst(gtk.Frame):
             entry.grab_focus()
 
 
-class ExtraPlayers(gtk.HBox):
+class ExtraPlayers(Gtk.HBox):
     """For effects, and background tracks."""
     
     def __init__(self, parent):
         self.approot = parent
 
-        self.nb_label = gtk.HBox(False, 0)
-        vb = gtk.VBox()
-        lbl = gtk.Label(_('Effects'))
+        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
+        self.nb_label = Gtk.HBox(False, 10)
+        vb = Gtk.VBox()
+        lbl = Gtk.Label(_('Effects'))
+        sg.add_widget(lbl)
         lbl.set_padding(0, 2)
         vb.pack_start(lbl)
         vb.show()
         self.nb_label.pack_start(vb)
-        self.nb_effects_box = gtk.HBox(False, 5)
+        self.nb_effects_box = Gtk.HBox(False, 5)
         self.nb_label.pack_start(self.nb_effects_box)
         self.nb_label.show_all()
         self.nb_effects_box.hide()
-        gtk.HBox.__init__(self)
+        Gtk.HBox.__init__(self)
         self.set_border_width(4)
         self.set_spacing(10)
         self.viewlevels = (5,)
 
-        esbox = gtk.VBox()
+        esbox = Gtk.VBox()
         self.pack_start(esbox)
-        estable = gtk.Table(columns=2, homogeneous=True)
+        estable = Gtk.Table(columns=2, homogeneous=True)
         estable.set_col_spacing(1, 8)
         esbox.pack_start(estable)
 
-        self.jvol_adj = (gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 10.0),
-                         gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 10.0))
-        self.jmute_adj = (gtk.Adjustment(100.0, 0.0, 127.0, 1.0, 10.0),
-                          gtk.Adjustment(100.0, 0.0, 127.0, 1.0, 10.0))
-        self.ivol_adj = gtk.Adjustment(64.0, 0.0, 127.0, 1.0, 10.0)
+        self.jvol_adj = (Gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 10.0),
+                         Gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 10.0))
+        self.jmute_adj = (Gtk.Adjustment(100.0, 0.0, 127.0, 1.0, 10.0),
+                          Gtk.Adjustment(100.0, 0.0, 127.0, 1.0, 10.0))
+        self.ivol_adj = Gtk.Adjustment(64.0, 0.0, 127.0, 1.0, 10.0)
         for each in (self.jvol_adj[0], self.jvol_adj[1], self.ivol_adj,
                                         self.jmute_adj[0], self.jmute_adj[1]):
             each.connect("value-changed",
                                 lambda w: parent.send_new_mixer_stats())
 
-        effects_hbox = gtk.HBox(homogeneous=True)
+        effects_hbox = Gtk.HBox()
+        effects_hbox.set_homogeneous(True)
         effects_hbox.set_spacing(6)
         effects = PGlobs.num_effects
         base = 0
@@ -586,38 +605,39 @@ class ExtraPlayers(gtk.HBox):
         self.effect_banks = []
         for col in range(effect_cols):
             bank = EffectBank(min(effects - base, max_rows), base,
-            "effects%d_session" % (col + 1), parent, self.all_effects,
+            f"effects{col + 1}_session", parent, self.all_effects,
             self.jvol_adj[col], self.jmute_adj[col])
             parent.label_subst.add_widget(bank, 
-                            "effectbank%d" % col, _('Effects %d') % (col + 1))
+                            f"effectbank{col}", _(f'Effects {col + 1}'))
             self.effect_banks.append(bank)
             effects_hbox.pack_start(bank)
             base += max_rows
         estable.attach(effects_hbox, 0, 2, 0, 1)
 
-        self.interlude_frame = interlude_frame = gtk.Frame()
+        self.interlude_frame = interlude_frame = Gtk.Frame()
         parent.label_subst.add_widget(interlude_frame, "bgplayername",
                                                         _('Background Tracks'))
         self.pack_start(interlude_frame)
-        hbox = gtk.HBox()
+        hbox = Gtk.HBox()
         hbox.set_spacing(1)
         interlude_frame.add(hbox)
-        interlude_box = gtk.VBox()
+        interlude_box = Gtk.VBox()
         hbox.pack_start(interlude_box)
         self.interlude = IDJC_Media_Player(interlude_box, "interlude", parent)
         interlude_box.set_no_show_all(True)
 
-        ilevel_vbox = gtk.VBox()
+        ilevel_vbox = Gtk.VBox()
         hbox.pack_start(ilevel_vbox, False, padding=3)
-        volpb = gtk.gdk.pixbuf_new_from_file(PGlobs.themedir / "volume2.png")
-        ivol_image = gtk.image_new_from_pixbuf(volpb)
+        volpb = GdkPixbuf.Pixbuf.new_from_file(PGlobs.themedir / "volume2.png")
+        ivol_image = Gtk.Image.new_from_pixbuf(volpb)
         ilevel_vbox.pack_start(ivol_image, False, padding=2)
-        ivol = gtk.VScale(self.ivol_adj)
+        ivol = Gtk.VScale.new(self.ivol_adj)
         ivol.set_inverted(True)
         ivol.set_draw_value(False)
         ilevel_vbox.pack_start(ivol, padding=2)
         set_tip(ivol, _('Background Tracks volume.'))
 
+        sg.add_widget(self.all_effects[0].tabwidget)
         self.show_all()
         interlude_box.show()
         self.approot.player_nb.connect('switch-page',
@@ -672,3 +692,41 @@ class ExtraPlayers(gtk.HBox):
     @interludeflush.setter
     def interludeflush(self, value):
         pass
+
+
+class ExtraPlayersWindow(Gtk.Window):
+    def __init__(self, notebook, notebook_page):
+        Gtk.Window.__init__(self, Gtk.WindowType.TOPLEVEL)
+        self._notebook = notebook
+        self._notebook_page = notebook_page
+        self.set_title(_('IDJC Effects') + PM.title_extra)
+        self.connect("delete-event", lambda w, e: self.hide() or True)
+        self.connect("notify::visible", self.cb_visible)
+        
+    def cb_visible(self, window, *args):
+        if window.props.visible:
+            if not window.get_children():
+                page = self._notebook.get_current_page()
+                pane = self._notebook.get_nth_page(self._notebook_page)
+                self._notebook.remove_page(self._notebook_page)
+                table = Gtk.Table(11, 3, True)
+                button = Gtk.Button(_('Restore'))
+                button.connect("clicked", lambda w: window.hide())
+                table.attach(button, 1, 2, 5, 6)
+                table.show_all()
+                self._notebook.insert_page(table, pane.nb_label,
+                                           self._notebook_page)
+                self._notebook.set_current_page(page)
+                window.add(pane)
+        else:
+            try:
+                pane = window.get_children()[0]
+            except IndexError:
+                pass
+            else:
+                window.remove(pane)
+                page = self._notebook.get_current_page()
+                self._notebook.remove_page(self._notebook_page)
+                self._notebook.insert_page(pane, pane.nb_label,
+                                           self._notebook_page)
+                self._notebook.set_current_page(page)

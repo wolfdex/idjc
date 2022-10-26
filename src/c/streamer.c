@@ -44,6 +44,7 @@ static void *streamer_main(void *args)
     struct encoder_op_packet *packet;
     size_t data_size;
     unsigned connect_time = 0;
+    int try_count = 10;
     
     sig_mask_thread();
     while (!self->thread_terminate_f)
@@ -61,6 +62,8 @@ static void *streamer_main(void *args)
             case SM_CONNECTING:
                 switch(self->shout_status)
                     {
+                    case SHOUTERR_RETRY:
+                        break;
                     case SHOUTERR_BUSY:
                         self->shout_status = shout_get_connected(self->shout);
 
@@ -82,8 +85,13 @@ static void *streamer_main(void *args)
                 break;
             case SM_CONNECTED:
                 /* check the connection is still on */
+                
                 if ((self->shout_status = shout_get_connected(self->shout)) != SHOUTERR_CONNECTED)
                     {
+                    if (self->shout_status == SHOUTERR_RETRY && try_count-- > 0) {
+                        fprintf(stderr, "retry\n");
+                        break;
+                    }
                     fprintf(stderr, "streamer_main: shout_get_error reports %ld %s\n", self->shout_status, shout_get_error(self->shout));
                     self->stream_mode = SM_DISCONNECTING;
                     }
@@ -202,6 +210,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
     char channels[2];
     char bitrate[4];
     char samplerate[6];
+    int try_count = 10;
 
     void sce(char *parameter)    /* stream connect error */
         {
@@ -444,8 +453,15 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
         sce("non-blocking");
         goto error;
         }
+    retry:
+    fprintf(stderr, "calling shout_open: remaining tries=%d\n", try_count--);
     switch(self->shout_status = shout_open(self->shout))
         {
+        case SHOUTERR_RETRY:
+            while (try_count > 0) {
+                goto retry;
+            }
+            break;
         case SHOUTERR_SUCCESS:
             self->shout_status = SHOUTERR_CONNECTED;
         case SHOUTERR_BUSY:
@@ -485,7 +501,11 @@ int streamer_disconnect(struct threads_info *ti, struct universal_vars *uv, void
 
 void shout_initialiser()
     {
+    int major, minor, patch;
+    
     shout_init();
+    shout_version(&major, &minor, &patch);
+    fprintf(stderr, "libshout version %d.%d.%d\n", major, minor, patch);
     }
 
 struct streamer *streamer_init(struct threads_info *ti, int numeric_id)
