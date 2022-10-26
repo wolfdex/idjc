@@ -477,7 +477,7 @@ class ProfileManager(metaclass=Singleton):
                                                                 verbose=True)
             if self._profile is None:
                 ap.error(_("no profile is set"))
-                
+
         else:
             claim = "session." + self._session_name
             try:
@@ -516,14 +516,14 @@ class ProfileManager(metaclass=Singleton):
     @property
     def session_name(self):
         """The name of the session."""
-        
+
         return self._session_name
-        
-        
+
+
     @property
     def session_uuid(self):
         """When session is JACK this will be set to something."""
-        
+
         return self._session_uuid
 
     @property
@@ -627,10 +627,10 @@ class ProfileManager(metaclass=Singleton):
 
         if session_dir is not None:
             session_dir = os.path.realpath(os.path.expanduser(session_dir))
-            
+
             if not os.path.isdir(session_dir):
                 ap.error(_('directory does not exist: %s') % session_dir)
-            
+
             # Use a subdir for the actual save path based on the mode and name.
             session_dir = os.path.join(session_dir, "idjc-%s-%s" % (
                                                 session_type, session_name))
@@ -646,13 +646,13 @@ class ProfileManager(metaclass=Singleton):
                     else:
                         # Perform copy of profile data.
                         try:
-                            shutil.copytree(PGlobs.profile_dir / 
+                            shutil.copytree(PGlobs.profile_dir /
                                                 args.profile[0], session_dir)
                         except EnvironmentError as e:
                             if e.errno != 17:
                                 ap.error("failed to copy data from the"
                                                 " profile directory: %s" % e)
-                    
+
             elif session_type != "JACK":
                 # Just make the empty session directory.
                 try:
@@ -665,7 +665,7 @@ class ProfileManager(metaclass=Singleton):
         if session_type == "JACK":
             if session_dir is None and args.profile is not None:
                 profile_check()
-                session_dir = PGlobs.profile_dir / args.profile[0] 
+                session_dir = PGlobs.profile_dir / args.profile[0]
             try:
                 session_uuid = uuid.UUID(args.jackserver[0])
             except TypeError:
@@ -700,7 +700,7 @@ class ProfileManager(metaclass=Singleton):
             if not os.path.exists(PGlobs.autoload_profile_pathname):
                 with open(PGlobs.autoload_profile_pathname, "w"):
                     pass
-            
+
             with open(PGlobs.autoload_profile_pathname, "r+") as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
                 al_profile = f.readline().strip()
@@ -724,6 +724,9 @@ class ProfileManager(metaclass=Singleton):
         busses = []
 
         try:
+            if not newprofile:
+                raise ProfileError(None, "Profile name field is blank.")
+
             try:
                 busses.append(self._grab_bus_name_for_profile(oldprofile))
                 if newprofile != oldprofile:
@@ -947,8 +950,8 @@ class ProfileManager(metaclass=Singleton):
     _profile_has_owner = profileclosure(dbus.SessionBus().name_has_owner,
                             "_profile_has_owner")
 
-    _grab_bus_name_for_profile = profileclosure(partial(
-        dbus.service.BusName, do_not_queue=True), "_grab_bus_name_for_profile")
+    _grab_bus_name_for_profile = profileclosure(partial(dbus.service.BusName,
+        do_not_queue=True, bus=dbus.SessionBus()), "_grab_bus_name_for_profile")
 
     @staticmethod
     def _grab_profile_filetext(profile, filename):

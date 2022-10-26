@@ -46,7 +46,7 @@ from gi.repository import GObject
 
 from idjc import FGlobs, PGlobs
 from .utils import string_multireplace
-from .gtkstuff import DefaultEntry, threadslock
+from .gtkstuff import DefaultEntry, TimeHMSEntry
 from .gtkstuff import WindowSizeTracker, FolderChooserButton
 from .gtkstuff import timeout_add, source_remove, MarkupLabel
 from .dialogs import *
@@ -70,7 +70,7 @@ LISTFORMAT = (("check_stats", bool), ("server_type", int), ("host", str),
                             ("login", str), ("password", str), ("tls", int),
                             ("ca_file", str), ("ca_directory", str),
                             ("client_cert", str))
-                            
+
 ListLine = namedtuple("ListLine", " ".join([x[0] for x in LISTFORMAT]))
 
 BLANK_LISTLINE = ListLine(1, 0, "", 8000, "", -1, "", "", 1, "", "", "")
@@ -93,7 +93,7 @@ def add_history_feature_to_ComboBoxText_instance(combo, max_size=6, initial_text
         raise TypeError("parameter not a ComboBoxText")
     if not combo.props.has_entry:
         raise TypeError("ComboBoxText has no Gtk.Entry")
-    
+
     def update_history(self, *args):
         text = self.get_child().get_text().strip()
         if self.store_blank or text:
@@ -121,12 +121,12 @@ def add_history_feature_to_ComboBoxText_instance(combo, max_size=6, initial_text
         self.update_history()
         col = self.props.entry_text_column
         return "\x00".join([row[col] for row in self.get_model()])
-        
+
     def set_history(self, hist):
         self.remove_all()
         for text in reversed(hist.split("\x00")):
-            self.set_text(text)       
-    
+            self.set_text(text)
+
     combo.update_history = MethodType(update_history, combo)
     combo.get_text = MethodType(get_text, combo)
     combo.set_text = MethodType(set_text, combo)
@@ -149,28 +149,28 @@ def add_metadata_menu_feature_to_ComboBoxText_instance(combo, initial_text=("", 
         raise TypeError("parameter not a ComboBoxText")
     if not combo.props.has_entry:
         raise TypeError("ComboBoxText has no Gtk.Entry")
-        
+
     def _on_populate_popup(self, entry, menu):
-        attr_menu_item = Gtk.MenuItem(_('Insert Attribute'))
+        attr_menu_item = Gtk.MenuItem.new_with_label(_('Insert Attribute'))
         submenu = Gtk.Menu()
         attr_menu_item.set_submenu(submenu)
         for label, subst in zip((_('Artist'), _('Title'), _('Album'),
                                 _('Song name')), ("%r", "%t", "%l", "%s")):
-            mi = Gtk.MenuItem(label)
+            mi = Gtk.MenuItem.new_with_label(label)
             mi.connect("activate", self._on_menu_activate, entry, subst)
             submenu.append(mi)
-        
+
         menu.append(attr_menu_item)
-        attr_menu_item.show_all()     
-        
+        attr_menu_item.show_all()
+
     def _on_menu_activate(self, mi, entry, subst):
         p = entry.get_position()
         entry.insert_text(subst, p)
-        entry.set_position(p + len(subst))      
-        
+        entry.set_position(p + len(subst))
+
     combo._on_populate_popup = MethodType(_on_populate_popup, combo)
     combo._on_menu_activate = MethodType(_on_menu_activate, combo)
-        
+
     combo.get_child().connect("populate-popup", combo._on_populate_popup)
     combo.set_history("\x00".join(initial_text))
 
@@ -191,7 +191,7 @@ class CategoryFrame(Gtk.Frame):
         self.set_label(frametext)
         self.set_shadow_type(Gtk.ShadowType.IN)
 
- 
+
 class SubcategoryFrame(Gtk.Frame):
     def __init__(self, frametext = None):
         Gtk.Frame.__init__(self)
@@ -201,20 +201,22 @@ class SubcategoryFrame(Gtk.Frame):
 
 class ConnectionDialog(Gtk.Dialog):
     """Create new data for or edit an item in the connection table.
-    
+
     When an item is selected in the TreeView, will edit, else add.
     """
     server_types = (_('Icecast 2 Master'), _('Shoutcast Master'),
                         _('Icecast 2 Stats/Relay'), _('Shoutcast Stats/Relay'))
 
     def __init__(self, parent_window, tree_selection):
-        Gtk.Dialog.__init__(self, _('Enter new server connection details'), 
-                            parent_window, Gtk.DialogFlags.MODAL |
-                            Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                            (Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
-                            Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
+        Gtk.Dialog.__init__(self,
+                            title=_('Enter new server connection details'),
+                            transient_for=parent_window,
+                            modal=True,
+                            destroy_with_parent=True)
+        self.add_buttons(_("Cancel"), Gtk.ResponseType.REJECT,
+                         _("OK"), Gtk.ResponseType.ACCEPT)
         model, iter = tree_selection.get_selected()
-            
+
         # Configuration from existing server data.
         #
         cap_master = True
@@ -259,9 +261,9 @@ class ConnectionDialog(Gtk.Dialog):
         self.servertype.add_attribute(text_renderer, "text", 1)
         self.servertype.add_attribute(text_renderer, "sensitive", 2)
         self.servertype.set_model(liststore)
-        
+
         self.hostname = DefaultEntry("localhost")
-        adj = Gtk.Adjustment(8000.0, 0.0, 65535.0, 1.0, 10.0)
+        adj = Gtk.Adjustment(value=8000.0, lower=0.0, upper=65535.0, step_increment=1.0, page_increment=10.0)
         self.portnumber = Gtk.SpinButton.new(adj, 1.0, 0)
         self.mountpoint = DefaultEntry("/listen")
         self.loginname = DefaultEntry("source")
@@ -276,11 +278,10 @@ class ConnectionDialog(Gtk.Dialog):
         self.tls_security.pack_start(tls_renderer, True)
         self.tls_security.add_attribute(tls_renderer, "text", 1)
 
-        file_dialog = Gtk.FileChooserDialog("", None,
-                Gtk.FileChooserAction.SELECT_FOLDER, (
-                Gtk.STOCK_CLEAR, Gtk.ResponseType.NONE,
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
-                Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
+        file_dialog = Gtk.FileChooserDialog(action=Gtk.FileChooserAction.SELECT_FOLDER)
+        file_dialog.add_buttons(_("Clear"), Gtk.ResponseType.NONE,
+                                _("Cancel"), Gtk.ResponseType.REJECT,
+                                _("OK"), Gtk.ResponseType.ACCEPT)
         file_dialog.set_modal(True)
         file_dialog.set_transient_for(self)
         # TC: Dialog title bar text.
@@ -290,63 +291,63 @@ class ConnectionDialog(Gtk.Dialog):
         self.ca_directory = FolderChooserButton(file_dialog)
         file_dialog.connect("response", self._on_file_response, self.ca_directory)
 
-        file_dialog = Gtk.FileChooserDialog("", None,
-                Gtk.FileChooserAction.OPEN, (
-                Gtk.STOCK_CLEAR, Gtk.ResponseType.NONE,
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
-                Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
+        file_dialog = Gtk.FileChooserDialog(action=Gtk.FileChooserAction.OPEN)
+        file_dialog.add_buttons(_("Clear"), Gtk.ResponseType.NONE,
+                                _("Cancel"), Gtk.ResponseType.REJECT,
+                                _("OK"), Gtk.ResponseType.ACCEPT)
         file_dialog.set_modal(True)
         file_dialog.set_transient_for(self)
         # TC: Dialog title bar text.
         file_dialog.set_title(_('Certificate Authority File'
                                                         ) + pm.title_extra)
         file_dialog.set_do_overwrite_confirmation(True)
-        self.ca_file = Gtk.FileChooserButton(file_dialog)
+        self.ca_file = Gtk.FileChooserButton.new_with_dialog(file_dialog)
         file_dialog.connect("response", self._on_file_response, self.ca_file)
 
-        file_dialog = Gtk.FileChooserDialog("", None,
-                Gtk.FileChooserAction.OPEN, (
-                Gtk.STOCK_CLEAR, Gtk.ResponseType.NONE,
-                Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
-                Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
+        file_dialog = Gtk.FileChooserDialog(action=Gtk.FileChooserAction.OPEN)
+        file_dialog.add_buttons(_("Clear"), Gtk.ResponseType.NONE,
+                                _("Cancel"), Gtk.ResponseType.REJECT,
+                                _("OK"), Gtk.ResponseType.ACCEPT)
         file_dialog.set_modal(True)
         file_dialog.set_transient_for(self)
         # TC: Dialog title bar text.
         file_dialog.set_title(_('TLS Client Certificate'
                                                         ) + pm.title_extra)
         file_dialog.set_do_overwrite_confirmation(True)
-        self.client_cert = Gtk.FileChooserButton(file_dialog)
+        self.client_cert = Gtk.FileChooserButton.new_with_dialog(file_dialog)
         file_dialog.connect("response", self._on_file_response, self.client_cert)
 
         if not FGlobs.shouttlsenabled:
             for each in (self.tls_security, self.ca_directory, self.ca_file, self.client_cert):
                 each.set_sensitive(False)
 
-        self.stats = Gtk.CheckButton(
+        self.stats = Gtk.CheckButton.new_with_label(
                         _('This server is to be scanned for audience figures'))
-        
+
         # Layout
         #
         self.set_border_width(5)
         hbox = Gtk.HBox(spacing = 20)
         hbox.set_border_width(15)
-        icon = Gtk.Image.new_from_stock(Gtk.STOCK_NETWORK, Gtk.IconSize.DIALOG)
+        icon = Gtk.Image.new_from_icon_name("network-server-symbolic", Gtk.IconSize.DIALOG)
+        icon.set_valign(Gtk.Align.START)
         hbox.pack_start(icon)
-        col = Gtk.VBox.new(homogeneous=True, spacing=4)
+        col = Gtk.VBox(homogeneous=True, spacing=4)
         hbox.pack_start(col)
         sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
         for text, widget in zip(
-                (_('Server type'), _('Hostname'), _('Port number'), 
+                (_('Server type'), _('Hostname'), _('Port number'),
                 _('Mount point'), _('Login name'), _('Password'),
-                _('TLS'), _('CA directory'), _('CA file'), _('Client cert')), 
+                _('TLS'), _('CA directory'), _('CA file'), _('Client cert')),
                 (self.servertype, self.hostname, self.portnumber,
                  self.mountpoint, self.loginname, self.password,
                  self.tls_security, self.ca_directory, self.ca_file,
                  self.client_cert)):
             row = Gtk.HBox()
             row.set_spacing(3)
-            label = Gtk.Label(text)
-            label.set_alignment(1.0, 0.5)
+            label = Gtk.Label.new(text)
+            label.set_xalign(1.0)
+            label.set_yalign(0.5)
             row.pack_start(label, False)
             row.pack_start(widget)
             sg.add_widget(label)
@@ -371,7 +372,7 @@ class ConnectionDialog(Gtk.Dialog):
         self.password.set_text(data.password)
         self.tls_security.set_active(tls)
         self.ca_directory.set_current_folder(data.ca_directory)
-        
+
         if data.ca_file:
             self.ca_file.set_filename(data.ca_file)
         else:
@@ -381,7 +382,7 @@ class ConnectionDialog(Gtk.Dialog):
         else:
             self.client_cert.unselect_all()
         self.stats.set_active(data.check_stats)
-        
+
     @staticmethod
     def _on_response(self, response_id, tree_selection, model, iter):
         if response_id == Gtk.ResponseType.ACCEPT:
@@ -423,7 +424,7 @@ class ConnectionDialog(Gtk.Dialog):
             tree_selection.get_tree_view().get_model().row_changed(
                                             model.get_path(new_iter), new_iter)
         self.destroy()
-        
+
     def _on_servertype_changed(self, servertype):
         sens = not (servertype.get_active() & 1)
         self.mountpoint.set_sensitive(sens)
@@ -448,14 +449,15 @@ class StatsThread(Thread):
         self.passwd = d["password"]
         self.listeners = -2         # preset error code for failed/timeout
         self.url = "http://{}:{}{}".format(self.host, self.port, self.mount)
-
+        if self.port == 65535:
+            raise RuntimeError
 
     def run(self):
         class BadXML(ValueError):
             pass
         class GoodXML(Exception):
             pass
-        
+
         hostport = "{}:{}".format(self.host, self.port)
         if self.is_shoutcast:
             stats_url = "http://{}/admin.cgi?mode=viewxml".format(hostport)
@@ -506,7 +508,7 @@ class StatsThread(Thread):
                 else:
                     raise GoodXML
             else:
-                
+
                 if dom.documentElement.tagName == u'icestats':
                     icestats = dom.documentElement
                 else:
@@ -520,7 +522,7 @@ class StatsThread(Thread):
                                             child.firstChild.wholeText.strip())
                                     raise GoodXML
                 else:
-                    raise BadXML                
+                    raise BadXML
 
         except GoodXML:
             print("server", self.url, "has", self.listeners, "listeners")
@@ -550,7 +552,7 @@ class CellRendererXCast(Gtk.CellRendererText):
                 "<span foreground='orange'>&#x25A0;</span>",
                 "<span foreground='#0077FF'>&#x25B4;</span>",
                 "<span foreground='orange'>&#x25B4;</span>")
-                
+
     ins_icons = ("<span foreground='#CCCCCC'>&#x25A0;</span>",
                 "<span foreground='#CCCCCC'>&#x25A0;</span>",
                 "<span foreground='#CCCCCC'>&#x25B4;</span>",
@@ -560,13 +562,13 @@ class CellRendererXCast(Gtk.CellRendererText):
         'servertype' : (GObject.TYPE_INT,
                              'kind of server',
                              'indication by number of the server in use',
-                             0, 3, 0, GObject.PARAM_READWRITE),
+                             0, 3, 0, GObject.ParamFlags.READWRITE),
         'sensitive' : (GObject.TYPE_BOOLEAN,
                             'sensitivity flag',
                             'indication of selectability',
-                             1, GObject.PARAM_READWRITE)
+                             1, GObject.ParamFlags.READWRITE)
         }
-    
+
     def __init__(self):
         Gtk.CellRendererText.__init__(self)
         self._servertype = 0
@@ -581,7 +583,7 @@ class CellRendererXCast(Gtk.CellRendererText):
             return self._sensitive
         else:
             raise AttributeError
-            
+
     def do_set_property(self, property, value):
         if property.name == 'servertype':
             self._servertype = value
@@ -628,7 +630,7 @@ class ConnectionPane(Gtk.VBox):
 
         tab.server_connect_label.set_text(text)
         tab.server_connect.set_sensitive(sens)
-    
+
     def individual_listeners_toggle_cb(self, cell, path):
         self.liststore[path][0] = not self.liststore[path][0]
 
@@ -656,12 +658,12 @@ class ConnectionPane(Gtk.VBox):
 
     def row_to_dict(self, rownum):
         """ obtain a dictionary of server data for a specified row """
-                
+
         return ListLine._make(self.liststore[rownum])._asdict()
-    
+
     def dict_to_row(self, _dict):
         """ append a row of server data from a dictionary """
-        
+
         _dict["listeners"] = -1
         row = ListLine(**_dict)
         t = row.server_type
@@ -686,7 +688,7 @@ class ConnectionPane(Gtk.VBox):
                 d.append('<{} dtype="{}">{}</{}>'.format(key, dtype, value, key))
             server.append("".join(("<server>", "".join(d), "</server>")))
         return "<connections>{}</connections>".format(''.join(server))
-    
+
     def loader(self, xmldata):
         def get_child_text(nodelist):
             t = []
@@ -725,7 +727,7 @@ class ConnectionPane(Gtk.VBox):
         except Exception as e:
             print(e)
         self.treeview.get_selection().select_path(0)
-            
+
     def stats_commence(self):
         self.stats_rows = []
         getstats = self.stats_always.get_active() or (
@@ -748,7 +750,7 @@ class ConnectionPane(Gtk.VBox):
         count = 0
         for ref, thread in self.stats_rows:
             if ref.valid() == False:
-                print("stats_collate:", thread.url, 
+                print("stats_collate:", thread.url,
                       "invalidated by its removal from the stats list")
                 continue
             row = ref.get_model()[ref.get_path()[0]]
@@ -771,7 +773,7 @@ class ConnectionPane(Gtk.VBox):
         self.connection_dialog.connect("destroy", self.on_dialog_destroy,
                                                     tree_selection, old_iter)
         self.connection_dialog.show()
-        
+
     def on_edit_clicked(self, button, tree_selection):
         model, iter = tree_selection.get_selected()
         if iter:
@@ -780,7 +782,7 @@ class ConnectionPane(Gtk.VBox):
             self.connection_dialog.show()
         else:
             print("nothing selected for edit")
-    
+
     def on_remove_clicked(self, button, tree_selection):
         model, iter = tree_selection.get_selected()
         if iter:
@@ -806,6 +808,7 @@ class ConnectionPane(Gtk.VBox):
         Gtk.VBox.__init__(self)
         self._streaming_set = False
         vbox = Gtk.VBox()
+        vbox.set_vexpand(True)
         vbox.set_border_width(6)
         vbox.set_spacing(6)
         self.add(vbox)
@@ -813,14 +816,14 @@ class ConnectionPane(Gtk.VBox):
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.ALWAYS)
-        vbox.pack_start(scrolled, True)
+        vbox.pack_start(scrolled, True, True)
         scrolled.show()
         self.liststore = Gtk.ListStore(*[x[1] for x in LISTFORMAT])
         self.liststore.connect("row-deleted", lambda x, y: self.set_button(tab))
-        self.liststore.connect("row-changed", 
+        self.liststore.connect("row-changed",
                                         lambda x, y, z: self.set_button(tab))
         self.set_button(tab)
-        self.treeview = Gtk.TreeView(self.liststore)
+        self.treeview = Gtk.TreeView(model=self.liststore)
         set_tip(self.treeview, _('A table of servers with which to connect. '
         'Only one master server can be added for the purpose of streaming. All'
         ' other servers will appear below the master server in the list for the'
@@ -830,10 +833,9 @@ class ConnectionPane(Gtk.VBox):
         self.treeview.connect("key-press-event", self.on_keypress)
 
         rend_type = CellRendererXCast()
-        rend_type.set_property("xalign", 0.5) 
-        col_type = Gtk.TreeViewColumn("", rend_type, servertype = 1)
+        rend_type.set_property("xalign", 0.5)
+        col_type = Gtk.TreeViewColumn("  ", rend_type, servertype=1)
         col_type.set_sizing = Gtk.TreeViewColumnSizing.AUTOSIZE
-        col_type.set_alignment(0.5)
         self.treeview.append_column(col_type)
         text_cell_rend = Gtk.CellRendererText()
         text_cell_rend.set_property("ellipsize", Pango.EllipsizeMode.END)
@@ -847,14 +849,13 @@ class ConnectionPane(Gtk.VBox):
         # TC: TCP port number.
         col_port = Gtk.TreeViewColumn(_('Port'), rend_port, text = 3)
         col_port.set_sizing = Gtk.TreeViewColumnSizing.AUTOSIZE
-        col_port.set_alignment(0.5)
         self.treeview.append_column(col_port)
         # TC: Mount point is a technical term in relation to icecast servers.
         col_mount = Gtk.TreeViewColumn(_('Mount point       '), text_cell_rend,
                                                                         text=4)
         col_mount.set_sizing = Gtk.TreeViewColumnSizing.AUTOSIZE
         self.treeview.append_column(col_mount)
-        
+
         rend_enabled = Gtk.CellRendererToggle()
         rend_enabled.connect("toggled", self.individual_listeners_toggle_cb)
         rend_listeners = Gtk.CellRendererText()
@@ -871,13 +872,13 @@ class ConnectionPane(Gtk.VBox):
         self.treeview.show()
 
         hbox = Gtk.HBox()
-        
+
         self.listener_count_button = Gtk.Button()
         ihbox = Gtk.HBox()
         set_tip(ihbox, _('The sum total of listeners in this server tab.'))
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(
-                            PGlobs.themedir / "listenerphones.png", 20, 16)
-        image = Gtk.Image.new_from_pixbuf(pixbuf)
+        #pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(
+        #                    PGlobs.themedir / "listenerphones.png", 20, 16)
+        image = Gtk.Image.new_from_icon_name("audio-headphones-symbolic", Gtk.IconSize.BUTTON)
         ihbox.pack_start(image, False, False, 0)
         image.show()
         frame = Gtk.Frame()
@@ -885,20 +886,22 @@ class ConnectionPane(Gtk.VBox):
         ihbox.pack_start(frame, True, True, 0)
         frame.show()
         ihbox.show()
-        self.listeners_display = Gtk.Label("0")
-        self.listeners_display.set_alignment(1.0, 0.5)
+        self.listeners_display = Gtk.Label.new("0")
+        self.listeners_display.set_xalign(1.0)
+        self.listeners_display.set_yalign(0.5)
         self.listeners_display.set_width_chars(6)
-        self.listeners_display.set_padding(3, 0)
+        self.listeners_display.set_margin_start(3)
+        self.listeners_display.set_margin_end(3)
         frame.add(self.listeners_display)
         self.listeners_display.show()
         self.listener_count_button.add(ihbox)
         hbox.pack_start(self.listener_count_button, False)
-        
+
         lcmenu = Gtk.Menu()
         self.listener_count_button.connect("button-press-event",
-            lambda w, e: lcmenu.popup(None, None, None, None, e.button, e.time))
+            lambda w, e: lcmenu.popup_at_pointer(e))
         # TC: Popup menu item on per-server listener stats widget in the server connection tab. Used to determine listener stats update policy.
-        lc_stats = Gtk.MenuItem(_("Update"))
+        lc_stats = Gtk.MenuItem.new_with_label(_("Update"))
         lcmenu.append(lc_stats)
         lcsubmenu = Gtk.Menu()
         lc_stats.set_submenu(lcsubmenu)
@@ -915,13 +918,13 @@ class ConnectionPane(Gtk.VBox):
         lcsubmenu.append(self.stats_always)
         lcsubmenu.append(self.stats_ifconnected)
         lcmenu.show_all()
-        
+
         bbox = Gtk.HButtonBox()
         bbox.set_spacing(6)
         bbox.set_layout(Gtk.ButtonBoxStyle.END)
-        new = Gtk.Button(stock=Gtk.STOCK_NEW)
-        self.remove = Gtk.Button(stock=Gtk.STOCK_DELETE)
-        edit = Gtk.Button(stock=Gtk.STOCK_EDIT)
+        new = Gtk.Button.new_with_label(_("New"))
+        self.remove = Gtk.Button.new_with_label(_("Delete"))
+        edit = Gtk.Button.new_with_label(_("Edit"))
         bbox.add(edit)
         bbox.add(self.remove)
         bbox.add(new)
@@ -937,75 +940,6 @@ class ConnectionPane(Gtk.VBox):
         vbox.pack_start(hbox, False)
         hbox.show_all()
         self.timer = ActionTimer(40, self.stats_commence, self.stats_collate)
-
-
-class TimeEntry(Gtk.HBox):
-    """A 24-hour-time entry widget with a checkbutton."""
-    
-    def time_valid(self):
-        return self.seconds_past_midnight >= 0
-
-    def get_seconds_past_midnight(self):
-        return self.seconds_past_midnight
-
-    def set_active(self, boolean):
-        self.check.set_active(boolean and True or False)
-
-    def get_active(self):
-        return self.check.get_active() and self.time_valid
-
-    def __entry_activate(self, widget):
-        boolean = widget.get_active()
-        self.entry.set_sensitive(boolean)
-        if boolean:
-            self.entry.grab_focus()
-
-    def __key_validator(self, widget, event):
-        if event.keyval < 128:
-            if event.string == ":":
-                return False
-            if event.string < "0" or event.string > "9":
-                return True
-
-    def __time_updater(self, widget):
-        text = widget.get_text()
-        if len(text) in (5, 8) and text[2] == ":":
-            try:
-                hh = int(text[:2])
-                mm = int(text[3:5])
-                try:
-                    ss = int(text[6:8])
-                except ValueError:
-                    ss = 0
-                else:
-                    if text[5] not in ":'":
-                        raise ValueError("bad separator")
-            except ValueError:
-                self.seconds_past_midnight = -1
-            else:
-                if 0 <= hh < 24 and 0 <= mm < 60 and 0 <= ss < 60:
-                    self.seconds_past_midnight = hh * 3600 + mm * 60 + ss
-                else:
-                    self.seconds_past_midnight = -1
-        else:
-            self.seconds_past_midnight = -1
-
-    def __init__(self, labeltext):
-        Gtk.HBox.__init__(self)
-        self.set_spacing(3)
-        self.check = Gtk.CheckButton(labeltext)
-        self.check.connect("toggled", self.__entry_activate)
-        self.pack_start(self.check, False)
-        self.check.show()
-        self.entry = Gtk.Entry()
-        self.entry.set_sensitive(False)
-        self.entry.set_width_chars(7)
-        self.entry.set_text("00:00:00")
-        self.entry.connect("key-press-event", self.__key_validator)
-        self.entry.connect("changed", self.__time_updater)
-        self.pack_start(self.entry, False)
-        self.entry.show()
-        self.seconds_past_midnight = -1
 
 
 class AutoAction(Gtk.HBox):
@@ -1045,8 +979,7 @@ class AutoAction(Gtk.HBox):
     def __init__(self, labeltext, names_actions):
         Gtk.HBox.__init__(self)
         self.radio_active = 0
-        self.check_button = Gtk.CheckButton(labeltext)
-        self.set_spacing(4)
+        self.check_button = Gtk.CheckButton.new_with_label(labeltext)
         self.pack_start(self.check_button, False, False, 0)
         self.check_button.show()
         lastradio = None
@@ -1114,7 +1047,7 @@ class SimpleFramedSpin(Gtk.Frame):
 
     def __init__(self, text, adj):
         Gtk.Frame.__init__(self)
-        label = Gtk.Label(text)
+        label = Gtk.Label.new(text)
         hbox = Gtk.HBox()
         hbox.pack_start(label, False, False, 3)
         label.show()
@@ -1131,7 +1064,7 @@ class SimpleFramedSpin(Gtk.Frame):
 
 class Tab(Gtk.VBox):
     """Base class for the widget in which each streamer and recorder appears."""
-    
+
     def show_indicator(self, colour):
         thematch = self.indicator_lookup[colour]
         thematch.show()
@@ -1161,10 +1094,10 @@ class Troubleshooting(Gtk.VBox):
         Gtk.VBox.__init__(self)
         self.set_border_width(6)
         self.set_spacing(8)
-        
+
         hbox = Gtk.HBox()
         hbox.set_spacing(4)
-        self.custom_user_agent = Gtk.CheckButton(_("Custom user agent string"))
+        self.custom_user_agent = Gtk.CheckButton.new_with_label(_("Custom user agent string"))
         self.custom_user_agent.connect("toggled", self._on_custom_user_agent)
         hbox.pack_start(self.custom_user_agent, False)
         self.user_agent_entry = Gtk.ComboBoxText.new_with_entry()
@@ -1174,20 +1107,20 @@ class Troubleshooting(Gtk.VBox):
         self.pack_start(hbox, False)
         set_tip(hbox, _("Set this on the occasion that the server or its "
             "firewall specifically refuses to allow libshout based clients."))
-        
+
         frame = Gtk.Frame()
-        self.automatic_reconnection = Gtk.CheckButton(
+        self.automatic_reconnection = Gtk.CheckButton.new_with_label(
                         _("If the connection breaks reconnect to the server"))
         self.automatic_reconnection.set_active(True)
         frame.set_label_widget(self.automatic_reconnection)
         self.pack_start(frame, False)
-        
+
         reconbox = Gtk.HBox()
         reconbox.set_border_width(6)
         reconbox.set_spacing(4)
         frame.add(reconbox)
         # TC: Label for a comma separated list of delay times.
-        reconlabel = Gtk.Label(_("Delay times"))
+        reconlabel = Gtk.Label.new(_("Delay times"))
         reconbox.pack_start(reconlabel, False)
         self.reconnection_times = Gtk.ComboBoxText.new_with_entry()
         add_history_feature_to_ComboBoxText_instance(self.reconnection_times,
@@ -1196,18 +1129,18 @@ class Troubleshooting(Gtk.VBox):
             " in seconds between reconnection attempts. Note that bad values"
             " or values less than 5 will be interpreted as 5."))
         reconbox.pack_start(self.reconnection_times, True)
-        self.reconnection_repeat = Gtk.CheckButton(_("Repeat"))
-        set_tip(self.reconnection_repeat, 
+        self.reconnection_repeat = Gtk.CheckButton.new_with_label(_("Repeat"))
+        set_tip(self.reconnection_repeat,
                             _("Repeat the sequence of delays indefinitely."))
         reconbox.pack_start(self.reconnection_repeat, False)
         # TC: User specifies no dialog box to be shown.
-        self.reconnection_quiet = Gtk.CheckButton(_("Quiet"))
+        self.reconnection_quiet = Gtk.CheckButton.new_with_label(_("Quiet"))
         set_tip(self.reconnection_quiet,
                 _("Keep the reconnection dialogue box hidden at all times."))
         reconbox.pack_start(self.reconnection_quiet, False)
         self.automatic_reconnection.connect("toggled",
                                     self._on_automatic_reconnection, reconbox)
-        
+
         ft = _('The contingency plan upon the stream buffer becoming full is...')
         frame = Gtk.Frame.new(" {} ".format(ft))
 
@@ -1216,16 +1149,16 @@ class Troubleshooting(Gtk.VBox):
         sbfbox.set_spacing(1)
         frame.add(sbfbox)
         self.pack_start(frame, False)
-        
+
         self.sbf_discard_audio = Gtk.RadioButton.new_with_label(None,
                                 _("Discard audio data for as long as needed."))
         self.sbf_reconnect = Gtk.RadioButton.new_with_label_from_widget(self.sbf_discard_audio,
                     _("Assume the connection is beyond saving and reconnect."))
         for each in (self.sbf_discard_audio, self.sbf_reconnect):
             sbfbox.pack_start(each, True, False)
-        
+
         self.show_all()
-        
+
         self.objects = {"custom_user_agent": (self.custom_user_agent, "active"),
             "user_agent_entry": (self.user_agent_entry, "history"),
             "automatic_reconnection": (self.automatic_reconnection, "active"),
@@ -1234,10 +1167,10 @@ class Troubleshooting(Gtk.VBox):
             "reconnection_quiet": (self.reconnection_quiet, "active"),
             "sbf_reconnect": (self.sbf_reconnect, "active"),
         }
-        
+
     def _on_custom_user_agent(self, widget):
         self.user_agent_entry.set_sensitive(widget.get_active())
-        
+
     def _on_automatic_reconnection(self, widget, reconbox):
         reconbox.set_sensitive(widget.get_active())
 
@@ -1266,7 +1199,7 @@ class StreamTab(Tab):
         return listofradiobuttons
 
     def make_notebook_tab(self, notebook, labeltext, tooltip = None):
-        label = Gtk.Label(labeltext)
+        label = Gtk.Label.new(labeltext)
         if tooltip is not None:
             set_tip(label, tooltip)
         vbox = Gtk.VBox()
@@ -1276,37 +1209,17 @@ class StreamTab(Tab):
         return vbox
 
     def label_item_layout(self, label_item_pairs, sizegroup):
-        """Widget packing method."""
-
-        hbox = Gtk.HBox()
-        vbox_left = Gtk.VBox()
-        vbox_left.set_spacing(1)
-        vbox_right = Gtk.VBox()
-        vbox_right.set_spacing(1)
-        hbox.pack_start(vbox_left, False, False, 0)
-        hbox.pack_start(vbox_right, True, True, 0)
-        hbox.set_spacing(3)
-        for text, item in label_item_pairs:
-            if text is not None:
-                labelbox = Gtk.HBox()
-                if type(text) == str:
-                    label = Gtk.Label(text)
-                else:
-                    label = text
-                sizegroup.add_widget(label)
-                labelbox.pack_end(label, False, False)
-                label.show()
-                vbox_left.pack_start(labelbox, False, False, 0)
-                labelbox.show()
-            itembox = Gtk.HBox()
-            sizegroup.add_widget(itembox)
-            itembox.add(item)
-            item.show()
-            vbox_right.pack_start(itembox, False, False, 0)
-            itembox.show()
-        vbox_left.show()
-        vbox_right.show()
-        return hbox
+        grid = Gtk.Grid()
+        grid.set_row_spacing(3)
+        grid.set_column_spacing(3)
+        for i, (text, item) in enumerate(label_item_pairs):
+            item.set_hexpand(True)
+            label = Gtk.Label.new(text)
+            label.set_xalign(1.0)
+            grid.attach(label, 0, i, 1, 1)
+            grid.attach_next_to(item, label, Gtk.PositionType.RIGHT, 1, 1)
+        grid.show_all()
+        return grid
 
     def send(self, string_to_send):
         Tab.send(self, "dev_type=streamer\n" + string_to_send)
@@ -1318,7 +1231,7 @@ class StreamTab(Tab):
         sens = bool(widget.get_active())
         for each in (self.mount_entry, self.login_entry):
             each.set_sensitive(sens)
-    
+
     def server_reconnect(self):
         if self.connection_string:
             self.send("command=server_disconnect\n")
@@ -1348,7 +1261,7 @@ class StreamTab(Tab):
                 del entry
             else:
                 user_agent = ""
-            
+
             # Determine the correct character encoding for fixed metadata.
             if d["server_type"] == 1:
                 if self.shoutcast_latin1.get_active():
@@ -1396,7 +1309,7 @@ class StreamTab(Tab):
                     "source": self.connection_pane.get_source_uri()
                     }
                 self.ircpane.connections_controller.new_metadata(ircmetadata)
-                
+
                 self.connection_pane.streaming_set(True)
         else:
             self.send("command=server_disconnect\n")
@@ -1419,7 +1332,7 @@ class StreamTab(Tab):
 
     def start_stop_encoder(self, command):
         """Reference counting starter and stopper for the encoder."""
-                
+
         if command == ENCODER_START:
             if not self.format_control.running:
                 # Custom metadata encoding may have been changed.
@@ -1429,7 +1342,7 @@ class StreamTab(Tab):
             self.format_control.start_encoder_rc()
         elif command == ENCODER_STOP:
             self.format_control.stop_encoder_rc()
-    
+
     def server_type_cell_data_func(self, celllayout, cell, model, iter):
         text = model.get_value(iter, 0)
         if text == _('Shoutcast') and lame_enabled == 0:
@@ -1437,7 +1350,7 @@ class StreamTab(Tab):
         else:
             cell.set_property("sensitive", True)
 
-    
+
     def cb_metadata(self, widget):
         def _getattr(o, n):
             v = getattr(o, n)
@@ -1473,7 +1386,7 @@ class StreamTab(Tab):
             else:
                 disp = ("no metadata string defined for this stream "
                         "format: {} {}".format(fdata['family'], fdata['codec']))
-            
+
             if cm:
                 if type(cm) is bytes:
                     cm = cm.decode("utf-8").encode(encoding, "replace")
@@ -1489,21 +1402,18 @@ class StreamTab(Tab):
             self.scg.receive()
 
     def cb_new_metadata_format(self, widget):
-        self.metadata_update.set_relief(Gtk.ReliefStyle.NORMAL)  
-    
-    @threadslock
+        self.metadata_update.set_relief(Gtk.ReliefStyle.NORMAL)
+
     def deferred_connect(self):
-        """Intended to be called from a thread."""
-        
         self.server_connect.set_active(True)
-  
+
     def cb_kick_incumbent(self, widget, post_action=lambda : None):
         """Try to remove whoever is using the server so that we can connect."""
-        
+
         mode = self.connection_pane.get_master_server_type()
         if mode == 0:
             return
-          
+
         srv = ListLine(*self.connection_pane.liststore[0])
         auth_handler = urllib.request.HTTPBasicAuthHandler()
 
@@ -1548,8 +1458,8 @@ class StreamTab(Tab):
                 print("kick failed:", e)
             else:
                 check_reply(reply)
-                post_action()
-      
+                idle_add(post_action)
+
         Thread(target=threaded).start()
 
     def __init__(self, scg, numeric_id, indicator_lookup):
@@ -1558,18 +1468,18 @@ class StreamTab(Tab):
         self.show_indicator("clear")
         self.tab_type = "streamer"
         self.set_spacing(10)
-              
+
         self.ic_expander = Gtk.Expander.new(_('Individual Controls'))
         self.pack_start(self.ic_expander, False)
         self.ic_expander.show()
-                
+
         self.ic_frame = Gtk.Frame()
         ic_vbox = Gtk.VBox()
         ic_vbox.set_border_width(10)
         ic_vbox.set_spacing(10)
         self.ic_frame.add(ic_vbox)
         ic_vbox.show()
-        
+
         hbox = Gtk.HBox()
         hbox.set_spacing(6)
         self.server_connect = Gtk.ToggleButton()
@@ -1588,116 +1498,122 @@ class StreamTab(Tab):
         self.server_connect.add(self.server_connect_label)
         self.server_connect_label.show()
         self.server_connect.show()
-        
+
         # TC: Kick whoever is on the server.
-        self.kick_incumbent = Gtk.Button(_('Kick Source'))
+        self.kick_incumbent = Gtk.Button.new_with_label(_('Kick Source'))
         self.kick_incumbent.connect("clicked", self.cb_kick_incumbent)
         set_tip(self.kick_incumbent, _('This will disconnect whoever is '
                 'currently using the server, freeing it up for personal use.'))
         hbox.pack_start(self.kick_incumbent, False)
         self.kick_incumbent.show()
-        
+
         ic_vbox.pack_start(hbox, False)
         hbox.show()
-        
+
+        auto_hbox = Gtk.HBox()
+        auto_hbox.set_spacing(10)
+        ic_vbox.pack_start(auto_hbox, False, False)
+        auto_hbox.show()
+
+        def pack_autoconnect(frame_text, toggle, time, extra_option):
+            time.connect("notify::value", lambda w,p: toggle.set_active(False))
+            frame = Gtk.Frame.new(" %s " % frame_text)
+            auto_hbox.pack_start(frame, True)
+            frame.show()
+            toggle.show()
+            grid = Gtk.Grid()
+            grid.set_vexpand(False)
+            grid.set_margin_start(3)
+            grid.set_margin_end(8)
+            grid.set_margin_top(3)
+            grid.set_margin_bottom(3)
+            frame.add(grid)
+            grid.show()
+            time.set_halign(Gtk.Align.CENTER)
+            time.set_hexpand(True)
+            grid.attach(time, 0, 0, 1, 2)
+            grid.attach(toggle, 1, 0, 1, 1)
+            toggle.set_halign(Gtk.Align.CENTER)
+            toggle.set_valign(Gtk.Align.CENTER)
+            toggle.set_vexpand(True)
+            toggle.show()
+            grid.attach(extra_option, 1, 1, 1, 1)
+            extra_option.set_valign(Gtk.Align.CENTER)
+            extra_option.set_vexpand(True)
+            extra_option.show()
+
+        self.start_timer = Gtk.Switch()
+        set_tip(self.start_timer, _("Enable automatic connection."))
+        self.connect_hms = TimeHMSEntry()
+        set_tip(self.start_timer, _("Time at which to automatically connect."))
+        self.kick_before_start = Gtk.CheckButton(label=_("Server kick"))
+        set_tip(self.kick_before_start, _("Kick whoever is streaming from the server prior to automatically connecting."))
+        pack_autoconnect(_("Automatically connect at time"), self.start_timer,
+                         self.connect_hms, self.kick_before_start)
+
+        self.stop_timer = Gtk.Switch()
+        set_tip(self.stop_timer, _("Enable automatic disconnection."))
+        self.disconnect_hms = TimeHMSEntry()
+        set_tip(self.stop_timer, _("Time at which to automatically disconnect."))
+        self.fade = Gtk.CheckButton(label=_("Player fade"))
+        set_tip(self.fade, _("Player audio to fade out just prior to automatic disconnection."))
+        pack_autoconnect(_("Automatically disconnect at time"), self.stop_timer,
+                         self.disconnect_hms, self.fade)
+
+        frame = Gtk.Frame.new("%s" % _("Upon connection"))
         hbox = Gtk.HBox()
-        hbox.set_spacing(6)
-        label = Gtk.Label(_('Timer:'))
-        hbox.pack_start(label, False)
-        label.show()
-        
-        self.start_timer = TimeEntry(_('From'))
-        set_tip(self.start_timer, _('Automatically connect to the server at '
-                'a specific time in 24 hour format, midnight being 00:00'))
-        hbox.pack_start(self.start_timer, False)
-        self.start_timer.show()
-        
-        self.kick_before_start = Gtk.CheckButton(_('Kick'))
-        self.kick_before_start.set_sensitive(False)
-        set_tip(self.kick_before_start, _('Disconnect whoever is using the '
-                                            'server just before start time.'))
-        hbox.pack_start(self.kick_before_start, False)
-        self.kick_before_start.show()
-
-        self.start_timer.check.connect("toggled", lambda w: 
-                        self.kick_before_start.set_sensitive(w.props.active))
-
-        
-        self.stop_timer = TimeEntry(_('To'))
-        set_tip(self.stop_timer, _('Automatically disconnect from the server '
-                                    'at a specific time in 24 hour format.'))
-        
-        self.fade = Gtk.CheckButton(_('Fade out'))
-        self.fade.set_sensitive(False)
-        set_tip(self.fade, _('Fade audio before disconnecting.'))
-        hbox.pack_end(self.fade, False)
-        self.stop_timer.check.connect("toggled", lambda w:
-                                    self.fade.set_sensitive(w.props.active))
-        self.fade.show()
-        hbox.pack_end(self.stop_timer, False)
-        self.stop_timer.show()
-
-        
-        ic_vbox.pack_start(hbox, False, False, 0)
-        hbox.show()
-        
-        hbox = Gtk.HBox() 
         hbox.set_spacing(10)
-        label = Gtk.Label(_('At connect:'))
-        hbox.pack_start(label, False, False, 0)
-        label.show()
+        hbox.set_border_width(3)
+        frame.add(hbox)
+        hbox.show()
+
         # TC: [x] Start player (*) 1 ( ) 2
         self.start_player_action = AutoAction(_('Start player'), (
                 ("1", self.source_client_gui.parent.player_left.play.clicked),
                 ("2", self.source_client_gui.parent.player_right.play.clicked)))
-        hbox.pack_start(self.start_player_action, False, False, 0)
+        hbox.pack_start(self.start_player_action, True, False, 0)
         self.start_player_action.show()
         set_tip(self.start_player_action, _('Have one of the players start '
         'automatically when a radio server connection is successfully made.'))
-        if PGlobs.num_recorders:
-            vseparator = Gtk.VSeparator()
-            hbox.pack_start(vseparator, True, False, 0)
-            vseparator.show()
-        
+
         # TC: [x] Start recorder (*) 1 ( ) 2
         self.start_recorder_action = AutoAction(_('Start recorder'), [
             (chr(ord("1") + i), t.record_buttons.record_button.activate)
             for i, t in enumerate(self.source_client_gui.recordtabframe.tabs)])
-        
-        hbox.pack_end(self.start_recorder_action, False, False, 0)
+
+        hbox.pack_start(self.start_recorder_action, True, False, 0)
         if PGlobs.num_recorders:
             self.start_recorder_action.show()
         set_tip(self.start_recorder_action, _('Have a recorder start '
         'automatically when a radio server connection is successfully made.'))
-        ic_vbox.pack_start(hbox, False, False, 0)
-        hbox.show()
+
+        ic_vbox.pack_start(frame, False, False, 0)
+        frame.show()
 
         frame = Gtk.Frame.new(" {} ".format(_('Metadata')))
-        table = Gtk.Table(3, 3)
+        table = Gtk.Grid()
         table.set_border_width(1)
-        table.set_margin_right(4)
-        table.set_margin_left(4)
-        table.set_row_spacings(1)
-        table.set_col_spacings(4)
+        table.set_margin_start(4)
+        table.set_margin_end(4)
+        table.set_row_spacing(1)
+        table.set_column_spacing(4)
         frame.add(table)
         table.show()
         ic_vbox.pack_start(frame, False)
         frame.show()
-        
+
         format_label = SmallLabel(_('Format String'))
         # TC: Label for the metadata fallback value.
         fallback_label = SmallLabel(_('Fallback'))
         self.metadata = Gtk.ComboBoxText.new_with_entry()
+        self.metadata.set_hexpand(True)
         add_history_feature_to_ComboBoxText_instance(self.metadata)
         add_metadata_menu_feature_to_ComboBoxText_instance(self.metadata)
         self.metadata.get_child().connect("changed", self.cb_new_metadata_format)
         self.metadata_fallback = Gtk.Entry()
         self.metadata_fallback.set_width_chars(10)
         self.metadata_fallback.set_text("<Unknown>")
-        self.metadata_update = Gtk.Button()
-        image = Gtk.Image.new_from_stock(Gtk.STOCK_EXECUTE, Gtk.IconSize.MENU)
-        self.metadata_update.set_image(image)
-        image.show()
+        self.metadata_update = Gtk.Button.new_with_label(_("Send Now"))
         self.metadata_update.connect("clicked", self.cb_metadata)
         self.metadata_display = Gtk.Statusbar()
 
@@ -1713,47 +1629,41 @@ class StreamTab(Tab):
             ' %l metadata is unavailable. See the format string to the left.'))
         set_tip(self.metadata_update, _('Metadata normally updates only on song'
             ' title changes but you can force an immediate update here.'))
-        
-        x = Gtk.AttachOptions.EXPAND
-        f = Gtk.AttachOptions.FILL
-        s = Gtk.AttachOptions.SHRINK
-        arrangement = (((format_label, x|f), (fallback_label, s|f)),
-                ((self.metadata, x|f),
-                (self.metadata_fallback, s), (self.metadata_update, s)))
-        
-        for r, row in enumerate(arrangement):
-            for c, (child, xopt) in enumerate(row):
-                table.attach(child, c, c + 1, r, r + 1, xopt, s|f)
-                child.show()
-        table.attach(self.metadata_display, 0, 3, 2, 3, x|f, s|f)
-        self.metadata_display.show()
+
+        table.attach(format_label, 0, 0, 1, 1)
+        table.attach(fallback_label, 1, 0, 1, 1)
+        table.attach_next_to(self.metadata, format_label, Gtk.PositionType.BOTTOM, 1, 1)
+        table.attach_next_to(self.metadata_fallback, fallback_label, Gtk.PositionType.BOTTOM, 1, 1)
+        table.attach_next_to(self.metadata_update, self.metadata_fallback, Gtk.PositionType.RIGHT, 1, 1)
+        table.attach(self.metadata_display, 0, 3, 3, 1)
+        table.show_all()
 
         self.pack_start(self.ic_frame, False)
-        
+
         self.details = Gtk.Expander.new(_('Configuration'))
         set_tip(self.details, _('The controls for configuring a stream.'))
         self.pack_start(self.details, False)
         self.details.show()
-      
+
         self.details_nb = Gtk.Notebook()
         self.pack_start(self.details_nb, False)
-        
+
         self.connection_pane = ConnectionPane(set_tip, self)
-        label = Gtk.Label(_('Connection'))
+        label = Gtk.Label.new(_('Connection'))
         self.details_nb.append_page(self.connection_pane, label)
         label.show()
         self.connection_pane.show()
-         
-        label = Gtk.Label(_('Format'))  # Format box
+
+        label = Gtk.Label.new(_('Format'))  # Format box
         self.format_control = FormatControl(self.send, self.receive)
         self.details_nb.append_page(self.format_control, label)
         self.format_control.connect("notify::cap-icecast", lambda a, b: self.connection_pane.set_button(self))
         self.format_control.connect("notify::cap-shoutcast", lambda a, b: self.connection_pane.set_button(self))
         label.show()
-        
+
         vbox = Gtk.VBox()
         # TC: Tab heading. User can enter information about the stream here.
-        label = Gtk.Label(_('Stream Info'))
+        label = Gtk.Label.new(_('Stream Info'))
         self.details_nb.append_page(vbox, label)
         label.show()
         vbox.show()
@@ -1774,13 +1684,13 @@ class StreamTab(Tab):
                                 _('The musical genres you are likely to play.'))
         genre_entry_box.pack_start(self.genre_entry, True, True, 0)
         self.genre_entry.show()
-        self.make_public = Gtk.CheckButton(_('Make Public'))
+        self.make_public = Gtk.CheckButton.new_with_label(_('Make Public'))
         set_tip(self.make_public, _('Publish your radio station on a listings'
             ' website. The website in question will depend on how the server'
             ' to which you connect is configured.'))
         genre_entry_box.pack_start(self.make_public, False, False, 0)
         self.make_public.show()
-        info_sizegroup = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
+        info_sizegroup = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
         stream_details_pane = self.label_item_layout((
             # TC: The DJ or Stream name.
             (_('DJ name'), self.dj_name_entry),
@@ -1798,7 +1708,7 @@ class StreamTab(Tab):
         vbox.set_spacing(10)
         alhbox = Gtk.HBox()
         alhbox.set_spacing(3)
-        label = Gtk.Label(_('Master server admin password'))
+        label = Gtk.Label.new(_('Master server admin password'))
         alhbox.pack_start(label, False)
         label.show()
         self.admin_password_entry = Gtk.Entry()
@@ -1823,7 +1733,7 @@ class StreamTab(Tab):
         self.icq_entry = Gtk.Entry()
         set_tip(self.icq_entry,
                     _('ICQ instant messenger connection info goes here.'))
-        contact_sizegroup = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
+        contact_sizegroup = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
         contact_details_pane = self.label_item_layout((
                                                  (_('IRC'), self.irc_entry),
                                                  (_('AIM'), self.aim_entry),
@@ -1832,34 +1742,34 @@ class StreamTab(Tab):
         contact_details_pane.set_border_width(10)
         frame.add(contact_details_pane)
         contact_details_pane.show()
-        
+
         vbox.pack_start(frame, False)
         frame.show_all()
 
-        self.shoutcast_latin1 = Gtk.CheckButton(
+        self.shoutcast_latin1 = Gtk.CheckButton.new_with_label(
                         _('Use ISO-8859-1 encoding for fixed metadata'))
         set_tip(self.shoutcast_latin1,
                         _('Enable this if sending to a Shoutcast V1 server.'))
         vbox.pack_start(self.shoutcast_latin1, False)
         self.shoutcast_latin1.show()
 
-        label = Gtk.Label(_('Extra Shoutcast'))
+        label = Gtk.Label.new(_('Extra Shoutcast'))
         self.details_nb.append_page(vbox, label)
         label.show()
         vbox.show()
-        
-        label = Gtk.Label(_("Troubleshooting"))
+
+        label = Gtk.Label.new(_("Troubleshooting"))
         self.troubleshooting = Troubleshooting()
         self.details_nb.append_page(self.troubleshooting, label)
         label.show()
-        
-        label = Gtk.Label("IRC")
+
+        label = Gtk.Label.new("IRC")
         self.ircpane = IRCPane()
         self.details_nb.append_page(self.ircpane, label)
         label.show()
 
         self.details_nb.set_current_page(0)
-        
+
         self.objects = {
             "metadata"    : (self.metadata, "history"),
             "metadata_fb" : (self.metadata_fallback, "text"),
@@ -1875,10 +1785,10 @@ class StreamTab(Tab):
             "contact_aim" : (self.aim_entry, "text"),
             "contact_irc" : (self.irc_entry, "text"),
             "contact_icq" : (self.icq_entry, "text"),
-            "timer_start_active" : (self.start_timer.check, "active"),
-            "timer_start_time" : (self.start_timer.entry, "text"),
-            "timer_stop_active" : (self.stop_timer.check, "active"),
-            "timer_stop_time" : (self.stop_timer.entry, "text"),
+            "timer_start_active" : (self.start_timer, "active"),
+            "timer_start_time" : (self.connect_hms, "value"),
+            "timer_stop_active" : (self.stop_timer, "active"),
+            "timer_stop_time" : (self.disconnect_hms, "value"),
             "timer_stop_fade" : (self.fade, "active"),
             "sc_admin_pass" : (self.admin_password_entry, "text"),
             "ic_expander" : (self.ic_expander, "expanded"),
@@ -1892,9 +1802,9 @@ class StreamTab(Tab):
             "details_nb" : (self.details_nb, "current_page"),
             "shoutcast_latin1" : (self.shoutcast_latin1, "active"),
         }
-                                
+
         self.objects.update(self.troubleshooting.objects)
-                                
+
         self.reconnection_dialog = ReconnectionDialog(self)
 
 
@@ -1911,7 +1821,7 @@ class RecordTab(Tab):
                             num_id = sd.streamtab.numeric_id
                         else:
                             num_id = -1
-   
+
                         filename = datetime.datetime.today().strftime(self.parentobject.scg.parent.prefs_window.recorder_filename.get_text().strip())
                         table = (("$$", "$"), ("$r", "{:02d}".format(self.parentobject.numeric_id + 1)))
                         filename = string_multireplace(filename, table)
@@ -1958,13 +1868,6 @@ class RecordTab(Tab):
                     self.parentobject.send("command=recorder_unpause\n")
                 self.parentobject.receive()
 
-        def path2image(self, pathname):
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(pathname, 14, 14)
-            image = Gtk.Image()
-            image.set_from_pixbuf(pixbuf)
-            image.show()
-            return image
-
         def __init__(self, parent):
             CategoryFrame.__init__(self)
             self.parentobject = parent
@@ -1977,19 +1880,23 @@ class RecordTab(Tab):
             self.stop_button = Gtk.Button()
             self.record_button = Gtk.ToggleButton()
             self.pause_button = Gtk.ToggleButton()
-            for button, dname, gname, signal, tip_text in (
-                    (self.stop_button,  PGlobs.themedir, "stop",  "clicked",
+            for button, icon_name, signal_data, signal_name, tip_text in (
+                    (self.stop_button, "media-playback-stop-symbolic", "stop",  "clicked",
                     _('Stop recording.')),
-                    (self.record_button, FGlobs.pkgdatadir, "rec", "toggled",
+
+                    (self.record_button, "media-record", "rec", "toggled",
                     _('Start recording.\n\nIf this button is greyed out it '
                     'could mean either the encoder settings are not valid or '
                     'write permission is not granted on the selected folder.'
                     )),
-                    (self.pause_button, PGlobs.themedir, "pause", "toggled",
-                                                        _('Pause recording.'))):
+
+                    (self.pause_button, "media-playback-pause-symbolic", "pause", "toggled",
+                    _('Pause recording.'))):
+
                 button.set_size_request(30, -1)
-                button.add(self.path2image(dname / (gname + ".png")))
-                button.connect(signal, self.cb_recbuttons, gname)
+                image = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+                button.set_image(image)
+                button.connect(signal_name, self.cb_recbuttons, signal_data)
                 hbox.pack_start(button, False, False, 0)
                 button.show()
                 set_tip(button, tip_text)
@@ -2033,7 +1940,7 @@ class RecordTab(Tab):
 
         def cb_source_combo(self, widget):
             sens = self.parentobject.record_buttons.record_button.set_sensitive
-            
+
             if widget.get_active() > 0:
                 self.streamtab = self.streamtabs[widget.get_active() - 1]
                 sens(self.cansave and self.streamtab.format_control.props.cap_recordable)
@@ -2061,7 +1968,7 @@ class RecordTab(Tab):
             hbox = Gtk.HBox()
             hbox.set_border_width(1)
             hbox.set_spacing(6)
-            
+
             self.source_store = Gtk.ListStore(str, int)
             self.source_combo = Gtk.ComboBox.new_with_model(self.source_store)
             self.source_combo.set_id_column(0)
@@ -2072,12 +1979,12 @@ class RecordTab(Tab):
             self.source_store.append((" FLAC+CUE", FGlobs.flacenabled))
             hbox.pack_start(self.source_combo, False, False, 0)
             self.source_combo.show()
-            arrow = Gtk.Arrow(Gtk.ArrowType.RIGHT, Gtk.ShadowType.IN)
+            arrow = Gtk.Arrow(arrow_type=Gtk.ArrowType.RIGHT, shadow_type=Gtk.ShadowType.IN)
             hbox.pack_start(arrow, False, False, 0)
             arrow.show()
-            file_dialog = Gtk.FileChooserDialog("", None,
-                    Gtk.FileChooserAction.SELECT_FOLDER, (Gtk.STOCK_CANCEL,
-                    Gtk.ResponseType.REJECT, Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
+            file_dialog = Gtk.FileChooserDialog(action=Gtk.FileChooserAction.SELECT_FOLDER)
+            file_dialog.add_buttons(_("Cancel"), Gtk.ResponseType.REJECT,
+                                    _("OK"), Gtk.ResponseType.ACCEPT)
             # TC: Dialog title bar text.
             file_dialog.set_title(_('Select the folder to record to'
                                                             ) + pm.title_extra)
@@ -2110,10 +2017,10 @@ class RecordTab(Tab):
         Tab.show_indicator(self, colour)
         self.scg.parent.recording_panel.indicator[self.numeric_id
                                                         ].set_indicator(colour)
-       
+
     def recordstate(self, state, path):
         self.scg._handle_recordstate(self.numeric_id, state, path)
-        
+
     def __init__(self, scg, numeric_id, indicator_lookup):
         Tab.__init__(self, scg, numeric_id, indicator_lookup)
         self.scg = scg
@@ -2152,7 +2059,7 @@ class TabFrame(ModuleFrame):
         for index in range(q_tabs):
             labelbox = Gtk.HBox()
             labelbox.set_spacing(3)
-            numlabel = Gtk.Label(str(index + 1))
+            numlabel = Gtk.Label.new(str(index + 1))
             labelbox.add(numlabel)
             numlabel.show()
             indicator_lookup = {}
@@ -2177,23 +2084,23 @@ class StreamTabFrame(TabFrame):
 
     def cb_metadata_group_set(self, tab):
         tab.metadata.set_text(self.metadata_group.get_text())
-                
+
     def cb_metadata_group_update(self, tab):
         self.cb_metadata_group_set(tab)
         tab.metadata_update.clicked()
-                
+
     def cb_connect_toggle(self, tab, val):
         if tab.server_connect.get_sensitive():
             tab.server_connect.set_active(val)
 
     def cb_kick_group(self, tab):
         tab.kick_incumbent.clicked()
-                
+
     def cb_group_safety(self, widget):
         sens = widget.get_active()
         for each in (self.disconnect_group, self.kick_group):
             each.set_sensitive(sens)
-            
+
     def __init__(self, scg, frametext, q_tabs, tabtype, indicatorlist,
                                                                 tab_tip_text):
         TabFrame.__init__(self, scg, frametext, q_tabs, tabtype,
@@ -2213,10 +2120,10 @@ class StreamTabFrame(TabFrame):
         hbox.set_spacing(5)
         gvbox.pack_start(hbox, False)
         hbox.show()
-        self.connect_group = Gtk.Button(_("Connect"))
+        self.connect_group = Gtk.Button.new_with_label(_("Connect"))
         self.connect_group.connect("clicked", self.forall,
                                                 self.cb_connect_toggle, True)
-        hbox.add(self.connect_group)
+        hbox.pack_start(self.connect_group)
         self.connect_group.show()
         frame = Gtk.Frame()
         hbox.add(frame)
@@ -2230,24 +2137,24 @@ class StreamTabFrame(TabFrame):
         self.group_safety.connect("toggled", self.cb_group_safety)
         ihbox.pack_start(self.group_safety, False)
         self.group_safety.show()
-        self.disconnect_group = Gtk.Button(_("Disconnect"))
+        self.disconnect_group = Gtk.Button.new_with_label(_("Disconnect"))
         self.disconnect_group.connect("clicked", self.forall,
                                                 self.cb_connect_toggle, False)
-        self.disconnect_group.connect("clicked", 
+        self.disconnect_group.connect("clicked",
                                 lambda x: self.group_safety.set_active(False))
         self.disconnect_group.set_sensitive(False)
-        ihbox.add(self.disconnect_group)
+        ihbox.pack_start(self.disconnect_group)
         self.disconnect_group.show()
-        self.kick_group = Gtk.Button(_("Kick Sources"))
+        self.kick_group = Gtk.Button.new_with_label(_("Kick Sources"))
         self.kick_group.connect("clicked", self.forall, self.cb_kick_group)
         self.kick_group.connect("clicked",
                                 lambda x: self.group_safety.set_active(False))
         self.kick_group.set_sensitive(False)
-        ihbox.add(self.kick_group)
+        ihbox.pack_start(self.kick_group)
         self.kick_group.show()
         hbox = Gtk.HBox()
         hbox.set_spacing(6)
-        label = Gtk.Label("{} ".format(_('Metadata:')))
+        label = Gtk.Label.new("{} ".format(_('Metadata:')))
         hbox.pack_start(label, False)
         label.show()
         self.metadata_group = Gtk.ComboBoxText.new_with_entry()
@@ -2255,31 +2162,25 @@ class StreamTabFrame(TabFrame):
         add_metadata_menu_feature_to_ComboBoxText_instance(self.metadata_group)
         hbox.pack_start(self.metadata_group)
         self.metadata_group.show()
-        self.metadata_group_set = Gtk.Button()
-        image = Gtk.Image.new_from_stock(Gtk.STOCK_ADD, Gtk.IconSize.MENU)
-        self.metadata_group_set.set_image(image)
-        image.show()
+        self.metadata_group_set = Gtk.Button.new_with_label(_("Update"))
         self.metadata_group_set.connect("clicked", self.forall,
                                                     self.cb_metadata_group_set)
         hbox.pack_start(self.metadata_group_set, False)
         self.metadata_group_set.show()
-        self.metadata_group_update = Gtk.Button()
-        image = Gtk.Image.new_from_stock(Gtk.STOCK_EXECUTE, Gtk.IconSize.MENU)
-        self.metadata_group_update.set_image(image)
-        image.show()
+        self.metadata_group_update = Gtk.Button.new_with_label(_("Send Now"))
         self.metadata_group_update.connect("clicked", self.forall,
                                                 self.cb_metadata_group_update)
         hbox.pack_start(self.metadata_group_update, False)
         self.metadata_group_update.show()
         gvbox.pack_start(hbox, False)
         hbox.show()
-        self.vbox.pack_start(outerframe, False) 
-        outerframe.show()  
+        self.vbox.pack_start(outerframe, False)
+        outerframe.show()
         self.vbox.reorder_child(outerframe, 0)
         self.objects = { "group_metadata": (self.metadata_group, "history") }
-        self.togglelist = [Gtk.CheckButton(str(x + 1)) for x in range(q_tabs)]
+        self.togglelist = [Gtk.CheckButton.new_with_label(str(x + 1)) for x in range(q_tabs)]
         hbox = Gtk.HBox()
-        label = Gtk.Label(" {} ".format(_('Group Controls')))
+        label = Gtk.Label.new(" {} ".format(_('Group Controls')))
         hbox.pack_start(label, False)
         label.show()
         for i, cb in enumerate(self.togglelist):
@@ -2290,9 +2191,9 @@ class StreamTabFrame(TabFrame):
         hbox.pack_end(spc, False, False, 2)
         spc.show()
         outerframe.set_label_widget(hbox)
-        
+
         hbox.show()
-        
+
 
 class SourceClientGui(dbus.service.Object):
     unexpected_reply = "unexpected reply from idjcsourceclient"
@@ -2312,7 +2213,7 @@ class SourceClientGui(dbus.service.Object):
             pass
         else:
             tab.metadata.set_text(string)
-            
+
     @dbus.service.method(dbus_interface=PGlobs.dbus_bus_basename,
                          in_signature="u")
     def metadata_update(self, index):
@@ -2322,12 +2223,12 @@ class SourceClientGui(dbus.service.Object):
             pass
         else:
             tab.metadata_update.clicked()
-    
+
 
     def monitor(self):
         self.led_alternate = not self.led_alternate
         streaming = recording = False
-        # update the recorder LED indicators 
+        # update the recorder LED indicators
         for rectab in self.recordtabframe.tabs:
             self.send("dev_type=recorder\n"
                       "tab_id={}\ncommand=get_report\n".format(rectab.numeric_id))
@@ -2344,7 +2245,7 @@ class SourceClientGui(dbus.service.Object):
                     rec_state = recorder_state != "0"
                     if rec_state:
                         recording = True
-                        
+
                     self._handle_recordstate(rectab.numeric_id, rec_state,
                                             rectab.record_buttons.path)
         update_listeners = False
@@ -2355,7 +2256,7 @@ class SourceClientGui(dbus.service.Object):
             if cp.timer.n == 0:
                 update_listeners = True
                 l_count += cp.listeners
-            
+
             self.send("dev_type=streamer\ntab_id={}\n"
                       "command=get_report\n".format(streamtab.numeric_id))
             reply = self.receive()
@@ -2411,28 +2312,27 @@ class SourceClientGui(dbus.service.Object):
             # the connection start/stop timers are processed here
             if streamtab.start_timer.get_active():
                 diff = time.localtime(time.time() - \
-                            streamtab.start_timer.get_seconds_past_midnight())
+                            streamtab.connect_hms.get_value())
                 # check hours, minutes, seconds for midnightness
                 if not (diff[3] or diff[4] or diff[5]):
-                    streamtab.start_timer.check.set_active(False)
+                    streamtab.start_timer.set_active(False)
                     if streamtab.kick_before_start.get_active():
                         streamtab.cb_kick_incumbent(None,
                                                     streamtab.deferred_connect)
-                    else:
-                        streamtab.server_connect.set_active(True)
+                    streamtab.server_connect.set_active(True)
             if streamtab.stop_timer.get_active() and \
                                         streamtab.server_connect.get_active():
                 if streamtab.fade.get_active():
                     diff = time.localtime(int(time.time()) + 5 - \
-                            streamtab.stop_timer.get_seconds_past_midnight())
+                            streamtab.disconnect_hms.get_value())
                     if not (diff[3] or diff[4] or diff[5]):
                         streamtab.issue_fade_command()
 
                 diff = time.localtime(int(time.time()) - \
-                            streamtab.stop_timer.get_seconds_past_midnight())
+                            streamtab.disconnect_hms.get_value())
                 if not (diff[3] or diff[4] or diff[5]):
                     streamtab.server_connect.set_active(False)
-                    streamtab.stop_timer.check.set_active(False)
+                    streamtab.stop_timer.set_active(False)
                     self.autoshutdown_dialog.present()
             self.is_streaming = streaming
             self.is_recording = recording
@@ -2443,7 +2343,7 @@ class SourceClientGui(dbus.service.Object):
 
     def _handle_streamstate(self, numeric_id, connected, streamtab):
         cache = self._streamstate_cache
-        
+
         if cache is not None and (numeric_id not in cache or cache[numeric_id] != connected):
             cache[numeric_id] = connected
             self.streamstate_changed(numeric_id, connected,
@@ -2484,7 +2384,7 @@ class SourceClientGui(dbus.service.Object):
             self.parent.destroy()
         else:
             self.parent.destroy_hard()
-    
+
     def receive(self):
         if not self.comms_reply_pending:
             raise RuntimeError("sc receive: nothing to receive")
@@ -2512,16 +2412,16 @@ class SourceClientGui(dbus.service.Object):
             string_to_send = "tab_id=-1\n" + string_to_send
         self.parent.mixer_write(string_to_send + "end\n", "sc")
         self.comms_reply_pending = string_to_send
-                
+
     def restart_streams_and_recorders(self):
         whichstreams = []
         whichrecorders = []
-        
+
         s = self.streamtabframe.tabs
         for each in s:
             whichstreams.append(each.server_connect.get_active())
             each.server_connect.set_active(False)
-        
+
         r = self.recordtabframe.tabs
         for each in r:
             whichrecorders.append(
@@ -2533,7 +2433,7 @@ class SourceClientGui(dbus.service.Object):
 
         for each in r:
             each.record_buttons.record_button.set_active(whichrecorders.pop(0))
-                
+
     def new_metadata(self, artist, title, album, songname):
         self.artist = artist
         self.title = title
@@ -2547,10 +2447,10 @@ class SourceClientGui(dbus.service.Object):
         ircmetadata = {"artist": artist, "title": title, "album": album,
                                                         "songname": songname}
         # Update the song metadata on all stream tabs.
-        for tab in self.streamtabframe.tabs:  
+        for tab in self.streamtabframe.tabs:
             tab.metadata_update.clicked()
             tab.ircpane.connections_controller.new_metadata(ircmetadata)
-        
+
     def source_client_open(self):
         global lame_enabled
 
@@ -2597,7 +2497,7 @@ class SourceClientGui(dbus.service.Object):
         else:
             FormatCodecMPEG.aac_enabled = 0
             FormatCodecMPEG.aacpv2_enabled = 0
-            
+
         self.uptime = time.time()
 
     def cb_delete_event(self, widget, event, data = None):
@@ -2605,7 +2505,7 @@ class SourceClientGui(dbus.service.Object):
         return True
 
     def save_session_settings(self, where):
-        try:               
+        try:
             # Check the following are initilised before proceeding.
             tabframes = (self, self.streamtabframe, self.recordtabframe)
         except AttributeError:
@@ -2615,7 +2515,7 @@ class SourceClientGui(dbus.service.Object):
             with open((where or pm.basedir) / "s_data", "w") as f:
                 for tabframe in tabframes:
                     for tab in tabframe.tabs:
-                        f.write("".join(("[", tab.tab_type, " ", 
+                        f.write("".join(("[", tab.tab_type, " ",
                                                 str(tab.numeric_id), "]\n")))
                         for lvalue, (widget, method) in tab.objects.items():
                             if type(method) == tuple:
@@ -2757,13 +2657,13 @@ class SourceClientGui(dbus.service.Object):
         self.wst.apply()
         #widget.resize(int(self.win_x), 1)
         self.streamtabframe.connect_group.grab_focus()
-        
+
     def cb_stream_details_expand(self, expander, param_spec, next_expander, sw):
         if expander.get_expanded():
             sw.show()
         else:
             sw.hide()
-        
+
         if expander.get_expanded() == next_expander.get_expanded():
             if not expander.get_expanded():
                 self.window.resize((self.wst.get_x()), 1)
@@ -2778,12 +2678,12 @@ class SourceClientGui(dbus.service.Object):
             frame.show()
         else:
             frame.hide()
-        
+
         if expander.get_expanded() == next_expander.get_expanded():
             self.window.resize((self.wst.get_x()), 1)
         else:
             next_expander.set_expanded(expander.get_expanded())
-        
+
     def update_metadata(self, text=None, filter=None):
         for tab in self.streamtabframe.tabs:
             if filter is None or str(tab.numeric_id) in filter:
@@ -2793,13 +2693,13 @@ class SourceClientGui(dbus.service.Object):
 
     def cb_populate_recorder_menu(self, mi, tabs):
         menu = mi.get_submenu()
-        
+
         def none(text):
-            mi = Gtk.MenuItem(text)
+            mi = Gtk.MenuItem.new_with_label(text)
             mi.set_sensitive(False)
             menu.append(mi)
             mi.show()
-        
+
         if not tabs:
             none(_('Recording Facility Unavailable'))
         elif not any(tab.record_buttons.record_button.get_sensitive() \
@@ -2817,7 +2717,8 @@ class SourceClientGui(dbus.service.Object):
                 dest = tab.source_dest.file_chooser_button.get_current_folder()
                 mi = Gtk.CheckMenuItem()
                 label = Gtk.Label()
-                label.set_alignment(0.0, 0.5)
+                label.set_xalign(0.0)
+                label.set_yalign(0.5)
                 label.set_markup(
                     # TC: Recorder menu format string.
                     (_("{numericid} [{source}] > [{directory}]").format(
@@ -2829,32 +2730,32 @@ class SourceClientGui(dbus.service.Object):
                 mi.set_sensitive(sens)
                 menu.append(mi)
                 mi.show()
-                mi.connect("activate", 
-                                lambda w, r, s: r.set_active(r.get_sensitive()) 
+                mi.connect("activate",
+                                lambda w, r, s: r.set_active(r.get_sensitive())
                                 if w.get_active() else s.clicked(), rec, stop)
 
     def cb_populate_streams_menu(self, mi, tabs):
         menu = mi.get_submenu()
-        
+
         def none(text):
-            mi = Gtk.MenuItem(text)
+            mi = Gtk.MenuItem.new_with_label(text)
             mi.set_sensitive(False)
             menu.append(mi)
             mi.show()
-        
+
         if not tabs:
             none(_('Streaming Facility Unavailable'))
         elif not any(tab.server_connect.get_sensitive() for tab in tabs):
             none(_('No Streams Are Currently Configured'))
         else:
             sens = any(x.get_active() for x in self.streamtabframe.togglelist)
-            mi = Gtk.MenuItem(_('Group Connect'))
+            mi = Gtk.MenuItem.new_with_label(_('Group Connect'))
             mi.set_sensitive(sens)
             menu.append(mi)
             mi.show()
             mi.connect("activate",
                     lambda w: self.streamtabframe.connect_group.clicked())
-            mi = Gtk.MenuItem(_('Group Disconnect'))
+            mi = Gtk.MenuItem.new_with_label(_('Group Disconnect'))
             mi.set_sensitive(sens)
             menu.append(mi)
             mi.show()
@@ -2863,17 +2764,18 @@ class SourceClientGui(dbus.service.Object):
             spc = Gtk.SeparatorMenuItem()
             menu.append(spc)
             spc.show()
-            
-            
+
+
             for tab in tabs:
                 sc = tab.server_connect
                 if sc.get_sensitive():
-                    mi = Gtk.CheckMenuItem("{} "
-                                           "{}".format(tab.numeric_id + 1, sc.get_children()[0].get_label()))
+                    mi = Gtk.CheckMenuItem(label="{} "
+                                           "{}".format(tab.numeric_id + 1,
+                                                       sc.get_children()[0].get_label()))
                     mi.set_active(sc.get_active())
                     menu.append(mi)
                     mi.show()
-                    mi.connect("activate", 
+                    mi.connect("activate",
                                 lambda w, b: b.set_active(w.get_active()), sc)
 
     def __init__(self, parent):
@@ -2882,7 +2784,7 @@ class SourceClientGui(dbus.service.Object):
         self.source_client_crash_count = 0
         self.source_client_open()
 
-        self.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
+        self.window = Gtk.Window()
         self.parent.window_group.add_window(self.window)
         # TC: Window title bar text.
         self.window.set_title(_('IDJC Output') + pm.title_extra)
@@ -2895,7 +2797,7 @@ class SourceClientGui(dbus.service.Object):
         vbox = Gtk.VBox()
         vbox.set_spacing(10)
         self.window.add(vbox)
-        
+
         self.recordtabframe = TabFrame(self, _('Record'), PGlobs.num_recorders,
             RecordTab, (
             ("clear", "led_unlit_clear_border_64x64"),
@@ -2913,7 +2815,7 @@ class SourceClientGui(dbus.service.Object):
             'The LED indicator colours represent the following: Clear=No '
             'connection Yellow=Awaiting authentication. Green=Connected. '
             'Flashing=Packet loss due to a bad connection.'))
-            
+
         tab = self.streamtabframe.tabs[-1]
         for next_tab in self.streamtabframe.tabs:
             tab.details.connect("notify::expanded",
@@ -2929,12 +2831,12 @@ class SourceClientGui(dbus.service.Object):
         for rectab in self.recordtabframe.tabs:
             rectab.source_dest.populate_stream_selector(_(' Stream '),
                                                     self.streamtabframe.tabs)
-              
+
         self.parent.menu.recordersmenu_i.connect("activate",
                     self.cb_populate_recorder_menu, self.recordtabframe.tabs)
         self.parent.menu.streamsmenu_i.connect("activate",
                     self.cb_populate_streams_menu, self.streamtabframe.tabs)
-        
+
 
         vbox.pack_start(self.recordtabframe, False, False, 0)
         if PGlobs.num_recorders:
@@ -2969,9 +2871,9 @@ class SourceClientGui(dbus.service.Object):
             self.dialog_group, self.parent.window_group, "",
             _('<span weight="bold" size="12000">A scheduled stream'
             ' disconnection has occurred.</span>'))
-        
-        self.monitor_source_id = timeout_add(250, threadslock(self.monitor))
+
+        self.monitor_source_id = timeout_add(250, self.monitor)
         self.window.realize()   # Prevent a rendering bug.
-        
+
         dbus.service.Object.__init__(self,
                     pm.dbus_bus_name, PGlobs.dbus_objects_basename + "/output")

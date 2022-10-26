@@ -1,10 +1,10 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.71])
-AC_INIT([idjc],[0.9.2],[http://idjc.sourceforge.net])
-AC_SUBST(COPYRIGHT_YEAR, [2021])
-AC_CANONICAL_TARGET
+AC_PREREQ(2.59)
+AC_INIT([idjc], [0.9.3], [https://idjc.sourceforge.io])
+AC_SUBST(COPYRIGHT_YEAR, [2022])
+AC_CANONICAL_SYSTEM
 AC_CONFIG_SRCDIR([config.h.in])
 AM_INIT_AUTOMAKE
 AM_CONFIG_HEADER([config.h])
@@ -52,7 +52,7 @@ if test ${GIT_PROG_EXISTS} = "yes" ; then
 fi
 
 AC_ARG_ENABLE([libav],
-   AS_HELP_STRING([--disable-libav],[remove capability to decode m4a/wma/avi files]),[makelibav=$enableval],[makelibav="maybe"])
+   AC_HELP_STRING([--disable-libav],[remove capability to decode m4a/wma/avi files]),[makelibav=$enableval],[makelibav="maybe"])
 
 if test $makelibav != "no" ; then
    AH_BOTTOM(
@@ -117,7 +117,7 @@ fi
 AC_CHECK_LIB([avutil], [av_opt_set_sample_fmt], AC_DEFINE(USE_SWRESAMPLE, 1, [Set if libswresample allows format conversion]))
 
 AC_ARG_ENABLE([speex],
-   AS_HELP_STRING([--disable-speex],[remove the capability to play/stream speex]),
+   AC_HELP_STRING([--disable-speex],[remove the capability to play/stream speex]),
    [makespeex=$enableval],[makespeex="maybe"])
 
 if test $makespeex != "no" ; then
@@ -146,7 +146,7 @@ else
 fi
 
 AC_ARG_ENABLE([flac],
-   AS_HELP_STRING([--disable-flac],[remove the capability to play/stream in FLAC]),
+   AC_HELP_STRING([--disable-flac],[remove the capability to play/stream in FLAC]),
    [makeflac=$enableval],[makeflac="maybe"])
 
 if test $makeflac != "no" ; then
@@ -176,8 +176,9 @@ fi
 AC_CHECK_HEADERS([mpg123.h libavutil/channel_layout.h])
 
 AC_ARG_ENABLE(mpg123,
-   AS_HELP_STRING([--disable-mpg123],[remove capability to play mp3 format]),[makempg123=$enableval],[makempg123="maybe"])
+   AC_HELP_STRING([--disable-mpg123],[remove capability to play mp3 format]),[makempg123=$enableval],[makempg123="maybe"])
 
+AC_CHECK_LIB([mpg123], [mpg123_param2], :, AC_DEFINE([MPG123_ENUM_API], [], [Defined if using really old version]))
 
 define(DYNMP3,[AC_DEFINE([DYN_MPG123], [1], [MPG123 to be linked dynamically])
     AC_SUBST([DYN_MPG123], [1])
@@ -202,7 +203,7 @@ fi
 AC_CHECK_HEADERS([lame/lame.h])
 
 AC_ARG_ENABLE(lame,
-   AS_HELP_STRING([--disable-lame],[remove capability to stream/record mp3 format]),[makelame=$enableval],[makelame="maybe"])
+   AC_HELP_STRING([--disable-lame],[remove capability to stream/record mp3 format]),[makelame=$enableval],[makelame="maybe"])
 
 if test $makelame != "no" ; then
 AC_CHECK_LIB([mp3lame -lm], [lame_init],
@@ -221,7 +222,7 @@ else
 fi
 
 AC_ARG_ENABLE([twolame],
-   AS_HELP_STRING([--disable-twolame],[remove the capability to stream in mp2]),
+   AC_HELP_STRING([--disable-twolame],[remove the capability to stream in mp2]),
    [maketwolame=$enableval],[maketwolame="maybe"])
 
 if test $maketwolame != "no" ; then
@@ -241,7 +242,7 @@ else
 fi
 
 AC_ARG_ENABLE([opus],
-   AS_HELP_STRING([--disable-opus],[remove capability to play/stream in opus format]),
+   AC_HELP_STRING([--disable-opus],[remove capability to play/stream in opus format]),
    [makeopus=$enableval],[makeopus="maybe"])
 
 AC_CHECK_LIB([ogg], [ogg_stream_flush_fill],[
@@ -276,15 +277,7 @@ AC_CHECK_FUNCS([sqrt pow], :, [AC_CHECK_LIB([m], [sqrt, pow], AC_SUBST(LIBM, "-l
 	AC_MSG_ERROR([math library is missing critical function]))])
 
 # Checks for header files.
-m4_warn([obsolete],
-[The preprocessor macro `STDC_HEADERS' is obsolete.
-  Except in unusual embedded environments, you can safely include all
-  ISO C90 headers unconditionally.])dnl
-# Autoupdate added the next two lines to ensure that your configure
-# script's behavior did not change.  They are probably safe to remove.
-AC_CHECK_INCLUDES_DEFAULT
-AC_PROG_EGREP
-
+AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h jack/jack.h jack/transport.h pthread.h], :, AC_MSG_ERROR([Critical header file missing]))
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -295,19 +288,7 @@ AC_TYPE_SIZE_T
 
 # Checks for library functions.
 AC_FUNC_MALLOC
-m4_warn([obsolete],
-[your code may safely assume C89 semantics that RETSIGTYPE is void.
-Remove this warning and the `AC_CACHE_CHECK' when you adjust the code.])dnl
-AC_CACHE_CHECK([return type of signal handlers],[ac_cv_type_signal],[AC_COMPILE_IFELSE(
-[AC_LANG_PROGRAM([#include <sys/types.h>
-#include <signal.h>
-],
-		 [return *(signal (0, 0)) (0) == 1;])],
-		   [ac_cv_type_signal=int],
-		   [ac_cv_type_signal=void])])
-AC_DEFINE_UNQUOTED([RETSIGTYPE],[$ac_cv_type_signal],[Define as the return type of signal handlers
-		    (`int' or `void').])
-
+AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([memset strchr], :, AC_MSG_ERROR([Critical function missing]))
 AC_CHECK_FUNCS([getline strndup canonicalize_file_name], :,
       [AC_DEFINE([USE_BSD_COMPAT],[1],

@@ -1,6 +1,6 @@
 /*
 #   xlplayer.c: player decoder module for idjc
-#   Copyright (C) 2006-2013 Stephen Fairchild (s-fairchild@users.sf.net)
+#   Copyright (C) 2006-2022 Stephen Fairchild (s-fairchild@users.sf.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -98,9 +98,9 @@ float *xlplayer_make_audio_to_float(struct xlplayer *self, float *buffer, uint8_
                     holder |= neg_mask;
                 if (self->dither && bits_per_sample < 20)
                     /* adds triangular dither */
-                    *fptr++ = (((float)(int32_t)holder) * fscale) + 
+                    *fptr++ = (((float)(int32_t)holder) * fscale) +
                     (((((float)rand_r(&self->seed)) - half_randmax) +
-                    (((float)rand_r(&self->seed)) - half_randmax)) * dscale); 
+                    (((float)rand_r(&self->seed)) - half_randmax)) * dscale);
                 else
                     *fptr++ = ((float)((int32_t)holder)) * fscale;
                 }
@@ -121,7 +121,7 @@ void xlplayer_demux_channel_data(struct xlplayer *self, sample_t *buffer, int nu
     {
     int i;
     sample_t *lc, *rc, *src, gain;
-    
+
     self->op_buffersize = num_samples * sizeof (sample_t);
     if ((!(self->leftbuffer = realloc(self->leftbuffer, self->op_buffersize))) && num_samples)
         {
@@ -196,7 +196,7 @@ void xlplayer_write_channel_data(struct xlplayer *self)
     const float threshold = 0.003;
     float *lp, *rp;
     int sc;
-    
+
     if (self->op_buffersize > jack_ringbuffer_write_space(self->right_ch))
         {
         self->write_deferred = TRUE;      /* prevent further accumulation of data that would clobber */
@@ -241,7 +241,7 @@ static u_int32_t xlplayer_update_progress_time_ms(struct xlplayer *self)
     {
     int32_t rb_time_ms;  /* the amount of time it would take to play all the samples in the buffer */
     int32_t progress;
-    
+
     rb_time_ms = (float)jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t) * 1000.0f / self->samplerate;
     progress = self->samples_written * 1000.0f / self->samplerate - rb_time_ms + self->seek_s * 1000.0f;
 
@@ -254,7 +254,7 @@ static u_int32_t xlplayer_update_progress_time_ms(struct xlplayer *self)
 static char *get_extension(char *pathname)
     {
     char *p, *extension;
-    
+
     if (!(p = strrchr(pathname, '.')))
         {
         fprintf(stderr, "get_extension: failed to find a file extension delineator '.'\n");
@@ -282,7 +282,7 @@ static void xlplayer_command(struct xlplayer *self, enum command_t new_command)
 static void *xlplayer_main(struct xlplayer *self)
     {
     char *extension;
-    
+
     sig_mask_thread();
     for(self->up = TRUE; self->command != CMD_THREADEXIT; self->watchdog_timer = 0)
         {
@@ -401,7 +401,7 @@ static void *xlplayer_main(struct xlplayer *self)
                 ++self->current_audio_context;
                 self->playmode = PM_STOPPED;
                 break;
-            } 
+            }
         }
     self->command = CMD_COMPLETE;
     return 0;
@@ -411,14 +411,14 @@ static void *xlplayer_main(struct xlplayer *self)
 static long conv_l_read(void *cb_data, float **audiodata)
     {
     struct xlplayer *self = (struct xlplayer *)cb_data;
-    
+
     if (self->pbs_exchange == 0)         /* used to maintain mapping of input buffers after a swap */
         {
         /* try and get at least PBSPEED_INPUT_SAMPLE_SIZE samples */
         self->pbs_norm_read_qty = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
         if (self->pbs_norm_read_qty > PBSPEED_INPUT_SAMPLE_SIZE)
             self->pbs_norm_read_qty = PBSPEED_INPUT_SAMPLE_SIZE;
-        
+
         jack_ringbuffer_read(self->left_ch, (char *)self->pbsrb_l, self->pbs_norm_read_qty * sizeof (sample_t));
         *audiodata = self->pbsrb_l;
         return self->pbs_norm_read_qty;
@@ -428,7 +428,7 @@ static long conv_l_read(void *cb_data, float **audiodata)
         self->pbs_fade_read_qty = jack_ringbuffer_read_space(self->left_fade) / sizeof (sample_t);
         if (self->pbs_fade_read_qty > PBSPEED_INPUT_SAMPLE_SIZE)
             self->pbs_fade_read_qty = PBSPEED_INPUT_SAMPLE_SIZE;
-        
+
         jack_ringbuffer_read(self->left_fade, (char *)self->pbsrb_lf, self->pbs_fade_read_qty * sizeof (sample_t));
         *audiodata = self->pbsrb_lf;
         return self->pbs_fade_read_qty;
@@ -438,7 +438,7 @@ static long conv_l_read(void *cb_data, float **audiodata)
 static long conv_r_read(void *cb_data, float **audiodata)
     {
     struct xlplayer *self = (struct xlplayer *)cb_data;
-    
+
     if (self->pbs_exchange == 0)
         {
         jack_ringbuffer_read(self->right_ch, (char *)self->pbsrb_r, self->pbs_norm_read_qty * sizeof (sample_t));
@@ -456,13 +456,13 @@ static long conv_r_read(void *cb_data, float **audiodata)
 static long conv_lf_read(void *cb_data, float **audiodata)
     {
     struct xlplayer *self = (struct xlplayer *)cb_data;
-    
+
     if (self->pbs_exchange == 0)
         {
         self->pbs_fade_read_qty = jack_ringbuffer_read_space(self->left_fade) / sizeof (sample_t);
         if (self->pbs_fade_read_qty > PBSPEED_INPUT_SAMPLE_SIZE)
             self->pbs_fade_read_qty = PBSPEED_INPUT_SAMPLE_SIZE;
-        
+
         jack_ringbuffer_read(self->left_fade, (char *)self->pbsrb_lf, self->pbs_fade_read_qty * sizeof (sample_t));
         *audiodata = self->pbsrb_lf;
         return self->pbs_fade_read_qty;
@@ -472,7 +472,7 @@ static long conv_lf_read(void *cb_data, float **audiodata)
         self->pbs_norm_read_qty = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
         if (self->pbs_norm_read_qty > PBSPEED_INPUT_SAMPLE_SIZE)
             self->pbs_norm_read_qty = PBSPEED_INPUT_SAMPLE_SIZE;
-        
+
         jack_ringbuffer_read(self->left_ch, (char *)self->pbsrb_l, self->pbs_norm_read_qty * sizeof (sample_t));
         *audiodata = self->pbsrb_l;
         return self->pbs_norm_read_qty;
@@ -481,7 +481,7 @@ static long conv_lf_read(void *cb_data, float **audiodata)
 static long conv_rf_read(void *cb_data, float **audiodata)
     {
     struct xlplayer *self = (struct xlplayer *)cb_data;
-    
+
     if (self->pbs_exchange == 0)
         {
         jack_ringbuffer_read(self->right_fade, (char *)self->pbsrb_rf, self->pbs_fade_read_qty * sizeof (sample_t));
@@ -501,7 +501,7 @@ struct xlplayer *xlplayer_create(int samplerate, double duration, char *playerna
     struct xlplayer *self;
     int error;
     const float minlevel = 1.0f/10000.0f;
-    
+
     if (!(self = calloc(1, sizeof (struct xlplayer))))
         {
         fprintf(stderr, "xlplayer: malloc failure");
@@ -690,12 +690,12 @@ int xlplayer_play_noflush(struct xlplayer *self, char *pathname, int seek_s, int
     self->noflush = FALSE;
     return self->initial_audio_context;
     }
-    
+
 void xlplayer_pause(struct xlplayer *self)
     {
     self->pause = TRUE;
     }
-    
+
 void xlplayer_unpause(struct xlplayer *self)
     {
     self->pause = FALSE;
@@ -705,7 +705,7 @@ void xlplayer_dither(struct xlplayer *self, int dither_f)
     {
     self->dither = dither_f;
     }
- 
+
 void xlplayer_eject(struct xlplayer *self)
     {
     if (!self->fadeout_f)
@@ -771,7 +771,7 @@ size_t read_from_player_sv(struct xlplayer *self, sample_t *left_buf, sample_t *
         self->jack_flush = 0;
         self->pause = 0;
         }
-    
+
     if (self->pause == 0)
         {
         if (self->pbspeed != self->newpbspeed)
@@ -784,7 +784,14 @@ size_t read_from_player_sv(struct xlplayer *self, sample_t *left_buf, sample_t *
             }
         /* the number of samples in the ring buffer used when calculating play progress */
         /* samples stored in the resampler are not worth the bother of accounting for */
-        self->avail = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
+        for(;;) {
+            self->avail = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
+            if (self->playmode != PM_STOPPED && self->avail < nframes * 4 + 160 && g.freewheel)
+                usleep(100);
+            else
+                break;
+        }
+
         /* read data from playback speed resampler */
         todo = src_callback_read(self->pbspeed_conv_l, self->pbspeed, nframes, left_buf);
         src_callback_read(self->pbspeed_conv_r, self->pbspeed, todo, right_buf);
@@ -819,7 +826,7 @@ size_t read_from_player(struct xlplayer *self, sample_t *left_buf, sample_t *rig
     {
     jack_ringbuffer_t *swap;
     size_t todo, favail, ftodo;
-    
+
     if (self->jack_flush)
         {
         if (self->noflush == FALSE)
@@ -841,23 +848,29 @@ size_t read_from_player(struct xlplayer *self, sample_t *left_buf, sample_t *rig
         self->jack_flush = 0;
         self->pause = 0;
         }
-    
-    self->avail = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
-    todo = (self->avail > nframes ? nframes : self->avail);
-    favail = jack_ringbuffer_read_space(self->right_fade) / sizeof (sample_t);
-    ftodo = (favail > nframes ? nframes : favail);
-    
+
+    for(;;) {
+        self->avail = jack_ringbuffer_read_space(self->right_ch) / sizeof (sample_t);
+        todo = (self->avail > nframes ? nframes : self->avail);
+        favail = jack_ringbuffer_read_space(self->right_fade) / sizeof (sample_t);
+        ftodo = (favail > nframes ? nframes : favail);
+        if (self->playmode != PM_STOPPED && todo < nframes && g.freewheel)
+            usleep(100);
+        else
+            break;
+    }
+
     if (self->pause == 0)
         {
         /* fill the frame with whatever data is available, then pad as needed with zeroes */
         jack_ringbuffer_read(self->left_ch, (char *)left_buf, todo * sizeof (sample_t));
-        memset(left_buf + todo, 0, (nframes - todo) * sizeof (sample_t)); 
+        memset(left_buf + todo, 0, (nframes - todo) * sizeof (sample_t));
         jack_ringbuffer_read(self->right_ch, (char *)right_buf, todo * sizeof (sample_t));
         memset(right_buf + todo, 0, (nframes - todo) * sizeof (sample_t));
         if (left_fbuf && right_fbuf)
             {
             jack_ringbuffer_read(self->left_fade, (char *)left_fbuf, ftodo * sizeof (sample_t));
-            memset(left_fbuf + ftodo, 0, (nframes - ftodo) * sizeof (sample_t)); 
+            memset(left_fbuf + ftodo, 0, (nframes - ftodo) * sizeof (sample_t));
             jack_ringbuffer_read(self->right_fade, (char *)right_fbuf, ftodo * sizeof (sample_t));
             memset(right_fbuf + ftodo, 0, (nframes - ftodo) * sizeof (sample_t));
             }
@@ -886,7 +899,7 @@ int xlplayer_calc_rbdelay(struct xlplayer *xlplayer)
 void xlplayer_set_dynamic_metadata(struct xlplayer *xlplayer, enum metadata_t type, char *artist, char *title, char *album, int delay)
     {
     struct xlp_dynamic_metadata *dm = &(xlplayer->dynamic_metadata);
-    
+
     pthread_mutex_lock(&(dm->meta_mutex));
     dm->data_type = type;
     if (dm->artist)
@@ -920,17 +933,17 @@ void xlplayer_buffer_alloc_all(struct xlplayer **list, jack_nframes_t nframes)
 size_t xlplayer_read_start(struct xlplayer *self, jack_nframes_t nframes)
     {
     size_t samples_read;
-        
+
     self->lcp = self->lcb;
     self->rcp = self->rcb;
     self->lcfp = self->lcfb;
     self->rcfp = self->rcfb;
-        
+
     if (self->use_sv)
         samples_read = read_from_player_sv(self, self->lcb, self->rcb, self->lcfb, self->rcfb, nframes);
     else
         samples_read = read_from_player(self, self->lcb, self->rcb, self->lcfb, self->rcfb, nframes);
-    
+
     return samples_read;
     }
 
@@ -951,11 +964,11 @@ void xlplayer_read_next(struct xlplayer *self)
         self->peak = abs;
     if ((abs = fabsf(*self->rcp)) > self->peak)
         self->peak = abs;
-        
+
     self->ls = *self->lcp++ + *self->lcfp++ * fade_level;
     self->rs = *self->rcp++ + *self->rcfp++ * fade_level;
     }
-    
+
 void xlplayer_read_next_all(struct xlplayer **list)
     {
     while (*list)
@@ -982,7 +995,7 @@ void xlplayer_smoothing_process(struct xlplayer *self)
     smoothing_mute_process(&self->mute_str);
     smoothing_mute_process(&self->mute_aud);
     }
-    
+
 void xlplayer_smoothing_process_all(struct xlplayer **list)
     {
     while (*list)
@@ -993,7 +1006,7 @@ void xlplayer_stats(struct xlplayer *self)
     {
     char prefix[20];
     struct xlp_dynamic_metadata *dm = &self->dynamic_metadata;
-    
+
     snprintf(prefix, 20, "%s_", self->playername);
     #define PREFIX() fputs(prefix, g.out)
 
@@ -1028,7 +1041,7 @@ void xlplayer_stats(struct xlplayer *self)
         dm->data_type = DM_NONE_NEW;
         pthread_mutex_unlock(&(dm->meta_mutex));
         }
-    
+
     #undef PREFIX
     }
 

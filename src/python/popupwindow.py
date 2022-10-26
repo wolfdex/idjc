@@ -19,7 +19,7 @@ __all__ = ['PopupWindow']
 
 import gi
 from gi.repository import GObject, Gtk
-from .gtkstuff import threadslock, timeout_add, source_remove
+from .gtkstuff import timeout_add, source_remove
 
 
 class PopupWindowCancelled(Exception):
@@ -44,7 +44,6 @@ class PopupWindow:
         self.widget.connect("button_release_event", self.handle_mouse, "button")
         self.widget.connect("scroll_event", self.handle_mouse, "scroll")
 
-    @threadslock
     def timeout_callback(self):
         try:
             self.timer_count += 1
@@ -52,7 +51,7 @@ class PopupWindow:
             if self.timer_count == self.popuptime:
                 if not self.timeout or self.total_timer_count < \
                                                 self.popuptime + self.timeout:
-                    self.popup_window = Gtk.Window(Gtk.WindowType.POPUP)
+                    self.popup_window = Gtk.Window(type=Gtk.WindowType.POPUP)
                     self.popup_window.set_decorated(False)
                     if self.winpopulate_callback(self.popup_window, \
                                             self.widget, self.x, self.y) != -1:
@@ -86,7 +85,7 @@ class PopupWindow:
             return False
         else:
             return True
-    
+
     def handle_mouse(self, widget, event, data):
         self.timer_count = 0
         # Store absolute mouse x and y coordiates.
@@ -112,4 +111,4 @@ class PopupWindow:
         if data == "button" or data == "scroll" or self.inhibit_callback() \
                                                         and self.inside_widget:
             source_remove(self.timeout_id)
-    
+

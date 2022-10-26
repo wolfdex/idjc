@@ -20,7 +20,7 @@ from gi.repository import Gtk
 
 
 class TooltipsGroup:
-    """A central control point for tooltips.""" 
+    """A central control point for tooltips."""
 
     def __init__(self):
         self.enabled = False
@@ -37,7 +37,7 @@ class TooltipsGroup:
         self.enabled = False
 
     def cb_query_tooltip(self, widget, x, y, keyboard_mode, tooltip, tip_text):
-        label = Gtk.Label(tip_text)
+        label = Gtk.Label.new(tip_text)
         label.set_line_wrap(True)
         tooltip.set_custom(label)
         label.show()

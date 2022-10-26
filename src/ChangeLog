@@ -1,3 +1,97 @@
+* Changes in version 0.9.3 *
+
+Replaced icon with an svg version.
+
+Updated documentation mainly with new screenshots in a dark theme.
+
+Audio input channels widget in Feature set coerced to even integer value.
+
+Icon light/dark theme determined by window background colour.
+
+Freewheel mode cancels when a player needs to change track.
+
+Freewheel mode fixed when using player speed/pitch controls.
+
+Fixed writing of non zero offset for first item in cue sheet.
+
+Fixed missing of DJ alarm and freewheel cancelling when in freewheel mode.
+
+Fixed insertion of blank metadata parameters in cue sheets when no metadata is available.
+
+Fixed pulling of silence from working players while in freewheel mode.
+
+Fixed hang bug if in freewheel mode and user stops the recorder.
+
+Added feature for BMillham for evaluation.
+
+Block size and Finish time updated when player is stopped in the Cue Up and Manual playlist modes.
+
+Fix for drag and drop directory into playlist.
+
+Cue sheet track counter now reset when recording stops.
+
+Selecting basic streamer mode now stops all effects and background player.
+
+Music database pane has a large handle.
+
+Removed broken external playlist mode.
+
+Copyright year bump.
+
+Removed ability to hide the background tracks.
+
+Removed ability to have a reduced number of effects.
+
+Background Tracks now in its own tab.
+
+Fixed misencoding of dynamic metadata to bytes(utf-8) rather than leaving as str.
+
+Music playback speed control center widget updated.
+
+Music database search now has a random button.
+
+Updated stream auto(dis)connect widgets.
+
+Monitor Mix buttons now render as toggle buttons.
+
+Active playlist announcement dialog box now has icons on action area buttons.
+
+New crossfader pass button icon.
+
+Fixed rendering of playlist control text.
+
+Fixed playlist announcements.
+
+Added character encoding with encoding fault tolerance to irc.
+
+Fixed poorly rendered voip private volume control icon.
+
+Music database fix for WHERE lookups.
+
+Fixed hang bug in profile manager if user tries to rename a profile with an empty profile name field.
+
+Removed stock id's. Replaced with gicons and plain text.
+
+Effect text can now highlight properly when containing pango markup characters.
+
+Fixed effects drag and drop.
+
+Appearance improvements for Effects.
+
+Fix for Ampache song title database ambiguous SQL queries.
+
+Multiple fixes for GTK deprecation warnings.
+
+Fix for deprectated import of collections.MutableSet in midicontrols.py.
+
+Fix for DSP button text visibility when using a dark theme.
+
+Fix for loading of m3u(8) playlists: uses non strict mode.
+
+Fix for loading of m3u playlists: decodes as iso-8859-15.
+
+Fix for dynamic mp3 with old libmpg123 to allow use of enum API.
+
 * Changes in version 0.9.2 *
 
 Updated idjcmon.py.
@@ -146,11 +240,11 @@ Libshout fork (libshout-idjc) upgraded to upstream version 2.4.1
 
 Fixed LAME tag ReplayGain metadata collection for newer versions of Mutagen.
 
-Updated avcodec encoder and decoder to silence deprecation warnings.   
+Updated avcodec encoder and decoder to silence deprecation warnings.
 
 Fixed the return value check of call to av_samples_alloc.
 
-Playlist block size and finish time now also appears when using the cue up and manual playlist modes. 
+Playlist block size and finish time now also appears when using the cue up and manual playlist modes.
 
 Fix for playlist modes 'Fade Over' and 'Random Hop' so that they work with fade settings other than 'None'
 
@@ -202,7 +296,7 @@ Fix for stream metadata character encoding: applied to extant metadata also.
 
 Can now read ReplayGain info from ID3 TXXX tags. Has priority over RVAD/RVA2 tags.
 
-Build system now handles problem with a too old libogg breaking Opus support. 
+Build system now handles problem with a too old libogg breaking Opus support.
 
 Can now obtain listener stats from Shoutcast 2 servers.
 
@@ -214,7 +308,7 @@ Build fix for older ffmpeg dependency.
 
 Fix for playlist controls having an overly dark background.
 
-Improved reliability for 'Fade Over' playlist mode and 'Crossfade' playlist control when using the silence killer. 
+Improved reliability for 'Fade Over' playlist mode and 'Crossfade' playlist control when using the silence killer.
 
 Song title database browse mode setting is now saved/restored.
 
@@ -526,7 +620,7 @@ New profile manager.
 
 Program launcher is now written in Python, replacing Bash.
 
-Removed deprecated 'Application' category from the desktop file. 
+Removed deprecated 'Application' category from the desktop file.
 
 Fixed libavcodecdecode.c to work with libavcodec 0.7 (Obsolete macro updated) Patch: Jonathan Nieder <jrnieder@gmail.com>
 
@@ -536,7 +630,7 @@ Visible state for per-server metadata.
 
 * Changes in version 0.8.5 *
 
-GUI for metadata in the Output window updated. Now has history on the custom metadata. The fallback tag text can be set. 
+GUI for metadata in the Output window updated. Now has history on the custom metadata. The fallback tag text can be set.
 
 Deleted cue sheets no longer hang around in the playlist - not that there is any proper support for these....
 
@@ -576,13 +670,13 @@ Mic indicates on status by the addition of a halo around the microphone icon in 
 
 Encoder ringbuffer size increased to accommodate really large JACK frame sizes.
 
-Mic player headroom can be set far higher. 
+Mic player headroom can be set far higher.
 
 Glib added to dependencies. Handles hash table duties in agc code. Hash tables and other GLib features may be used internally to a greater degree as code gets rewritten.
 
 Improvements to the front panel mic open button text. Alt text overrides the mic number, stereo mics are indicated.
 
-Microphones can be made subordinates of a stereo pair. Mic 1 can be paired with 2, 2 with 1, 3 with 4. This achieves two things: 1. stereo mics can be configured with one set of settings; 2. the side-chains merge to facilitate a stable stereo image. 
+Microphones can be made subordinates of a stereo pair. Mic 1 can be paired with 2, 2 with 1, 3 with 4. This achieves two things: 1. stereo mics can be configured with one set of settings; 2. the side-chains merge to facilitate a stable stereo image.
 
 The number of available microphones, streamers, and recorders can be adjusted in Prefs->Feature set.
 
@@ -717,7 +811,7 @@ Documentation updated.
 
 MP3 playback can now be dithered. Option in the preferences. Default = on.
 
-Added Replay Gain functionality. 
+Added Replay Gain functionality.
 
 Untagged tracks are now typically shown with the track number cleaned off (requires track number be on the left).
 
@@ -925,7 +1019,7 @@ The stream peak meter now red-lines at -2dB and the VU at -7 dB.
 
 Added a new option to cap the maximum stream audio level at -2dB. This may improve the encoding quality. When active this change is reflected in the Str Peak and Str VU meters by the drawing of a line.
 
-Tighter timings on the interlude player. Silence detection at the end of tracks is now more aggressive. Compensated for extended quiet intro songs by inhibiting silence detect on the first 15 seconds of any track. 
+Tighter timings on the interlude player. Silence detection at the end of tracks is now more aggressive. Compensated for extended quiet intro songs by inhibiting silence detect on the first 15 seconds of any track.
 
 Now using the python subprocess module for launching the mixer and sourceclient sub-processes to clear a deprecation warning.
 
@@ -1045,7 +1139,7 @@ Fixed oggscan_eos in oggdec.c so that all ogg/oga files should import correctly.
 
 Added the keyword 'managed' to the Ogg/vorbis encoder configuration line for when in managed bitrate mode.
 
-Added a new Ogg/vorbis streaming configurator. Upper and lower limits are now expressed as a percentage. Feature expansion is made possible for alternative types of Ogg stream by this new arrangement. 
+Added a new Ogg/vorbis streaming configurator. Upper and lower limits are now expressed as a percentage. Feature expansion is made possible for alternative types of Ogg stream by this new arrangement.
 
 Default text in the jack ports tab now reads system instead of alsa_pcm - this is compatible across different jack back ends but only for recent versions of jack.
 
@@ -1226,7 +1320,7 @@ Bitrate, samplerate, and number of channels info is now set before the connectio
 Fixed regression in the X-Chat announcer which would cause the application to lock up if used.
 
 * Changes in version 0.7.0b *
- 
+
 Fixed a regression in the playlist controls 'Stop streaming' and 'Stop recording' which was causing a lock-up to occur.
 
 * Changes in version 0.7.0a *
@@ -1346,7 +1440,7 @@ Added profile support.  To use it launch idjc as follows: idjc profilename.  Thi
 Fixed a crash that would occur when attempting to play from an empty playlist.
 
 Added an option for MP3 metadata to be in UTF-8 encoding instead of the ISO8859-1(latin1).
- 
+
 Updated the X-chat plugin to show a helpful error message within X-chat whenever an announcement message is dropped due to not matching the specified nick in any of the specified channels.
 
 * Changes in version 0.6.7b *
@@ -1363,7 +1457,7 @@ Bugfix to compressor: de-ess was being fed an uninitialised value.
 
 Accuracy improvements to the db lookup/conversion tables.
 
-Improvements to the soft knee compression curve in the compressor.  Values checked with gnuplot. 
+Improvements to the soft knee compression curve in the compressor.  Values checked with gnuplot.
 
 * Changes in version 0.6.7 *
 
@@ -1613,7 +1707,7 @@ Added a man page for IDJC.  It covers advice on configuring JACK.
 
 Modified the parse routines in idjcmixer and idjcserver to use code in a new common source file kvpdict.c that ensures that no buffer can be overfilled.  A new buffer is allocated every time that new data is received (made perfectly to measure) rather than using fixed size buffers as was done previously.
 
-Thanks to the GNU autotools libshout is now optional, but recommended of course.  The server window streaming related widgets will appear ghosted if you install IDJC without libshout. 
+Thanks to the GNU autotools libshout is now optional, but recommended of course.  The server window streaming related widgets will appear ghosted if you install IDJC without libshout.
 
 Added GNU autotools build system.  ./configure and all that.
 

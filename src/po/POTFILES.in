@@ -5,7 +5,8 @@ python/prelims/profiledialog.py
 python/dialogs.py
 python/__init__.py.in.in
 python/irc.py
-python/jingles.py
+python/effects.py
+python/background.py
 python/licence_window.py
 python/maingui.py
 python/midicontrols.py

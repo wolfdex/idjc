@@ -47,13 +47,14 @@ from idjc import FGlobs, PGlobs
 from .playergui import *
 from .sourceclientgui import *
 from .preferences import *
-from .jingles import ExtraPlayers, ExtraPlayersWindow
+from .effects import EffectsPlayers, EffectsPlayersWindow
+from .background import Background
 from .utils import SlotObject
 from .utils import LinkUUIDRegistry
 from .utils import PathStr
-from .gtkstuff import threadslock, WindowSizeTracker, ConfirmationDialog
+from .gtkstuff import WindowSizeTracker, ConfirmationDialog
 from .gtkstuff import IconChooserButton, IconPreviewFileChooserDialog, LEDDict
-from .gtkstuff import LabelSubst, gdklock, nullcm, MarkupLabel
+from .gtkstuff import LabelSubst, MarkupLabel
 from .gtkstuff import idle_add, timeout_add, timeout_add_seconds, source_remove
 from . import midicontrols
 from .tooltips import set_tip
@@ -73,17 +74,17 @@ METER_TEXT_SIZE = 8000
 
 class FreewheelButton(Gtk.Button):
     LED = LEDDict(9)
-    
+
     def __init__(self, mixer_write):
         Gtk.Button.__init__(self)
         hbox = Gtk.HBox()
         self._indicator = Gtk.Image()
-        self._indicator.set_alignment(0.0, 0.0)
+        self._indicator.set_valign(Gtk.Align.START)
         hbox.pack_start(self._indicator, False)
         self._indicator.show()
         label = Gtk.Label()
-        label.set_padding(2, 0)
-        label.set_alignment(1.0, 0.5)
+        label.set_margin_start(2)
+        label.set_margin_end(2)
         label.set_markup(u"<span size='15000'>\u2699</span>")
         hbox.pack_start(label, False)
         label.show()
@@ -91,15 +92,15 @@ class FreewheelButton(Gtk.Button):
         hbox.show()
         self._mixer_write = mixer_write
         self.connect("clicked", lambda w: self._cb_toggle())
-        self._enabler = Gtk.CheckButton(_('Show a JACK freewheel control on the main panel'))
+        self._enabler = Gtk.CheckButton.new_with_label(_('Show a JACK freewheel control on the main panel'))
         self._enabler.connect("toggled", self._cb_enabler)
         set_tip(self, _('Toggle JACK freewheel mode.'))
         self._active = None
         self.set_value(False)
-    
+
     def _cb_toggle(self):
         self._mixer_write("ACTN=freewheel_toggle\nend\n")
-        
+
     def set_active(self, active):
         self._mixer_write(
                         "ACTN=freewheel_%s\nend\n" % ("on" if active else "off"))
@@ -110,18 +111,18 @@ class FreewheelButton(Gtk.Button):
     @property
     def enabler(self):
         """This button has a show/hide control in prefs."""
-        
+
         return self._enabler
 
     @property
     def activedict(self):
         """Info for save/restore."""
-        
+
         return {"freewheel_button_enable": self._enabler}
 
     def set_value(self, active):
         """Indicator of freewheel mode to be set using this method."""
-        
+
         if active != self._active:
             self._active = active
             self._indicator.set_from_pixbuf(self.LED["red" if active else "clear"])
@@ -131,7 +132,10 @@ class MenuMixin(object):
     def build(self, menu, autowipe=False, use_underline=True):
         def mkitems(x, how=Gtk.MenuItem):
             for name, text in x:
-                mi = how(text)
+                if how in (Gtk.MenuItem, Gtk.CheckMenuItem):
+                    mi = how.new_with_label(text)
+                elif how == StockMenuItem:
+                    mi = Gtk.ImageMenuItem.new_from_stock(text, None)
                 mi.set_use_underline(use_underline)
                 menu.append(mi)
                 mi.show()
@@ -140,13 +144,12 @@ class MenuMixin(object):
                     mi.connect("activate", self.cb_autowipe)
 
                 if issubclass(how, Gtk.CheckMenuItem) and use_underline == True:
-                    a = Gtk.ToggleAction(None, text, None, None)
-                    #a.connect_proxy(mi)
+                    a = Gtk.ToggleAction(label=text)
                     mi.set_related_action(a)
                     setattr(self, name + "menu_a", a)
 
         return mkitems
-        
+
     def submenu(self, mi, name):
         m = Gtk.Menu()
         mi.set_submenu(m)
@@ -158,14 +161,13 @@ class MenuMixin(object):
         s = Gtk.SeparatorMenuItem()
         menu.append(s)
         s.show()
-        
+
     def cb_autowipe(self, mi):
         mi.get_submenu().foreach(lambda w: w.destroy())
 
 
 class StockMenuItem(Gtk.ImageMenuItem):
-    def __new__(cls, stock_id):
-        return Gtk.ImageMenuItem.new_from_stock(stock_id, None)
+    pass
 
 
 class MainMenu(Gtk.MenuBar, MenuMixin):
@@ -179,22 +181,21 @@ class MainMenu(Gtk.MenuBar, MenuMixin):
                                 ("recorders", _('Recorders'))))
 
         self.sep(self.filemenu)
-        self.build(self.filemenu)((("quit", Gtk.STOCK_QUIT),),
-                                                            StockMenuItem)
+        self.build(self.filemenu)((("quit", _("Quit")),))
 
         for each in ("streams", "recorders"):
             mi = getattr(self, each + "menu_i")
             m = self.submenu(mi, each)
-            
+
         self.submenu(self.viewmenu_i, "view")
         mkitems = self.build(self.viewmenu)
         mkitems(zip("output prefs profiles effects".split(" "),
                 (_('Output'), _('Preferences'), _('Profiles'),
                  _('Effects (windowed)'))))
         self.sep(self.viewmenu)
-        mkitems(zip("songdb chmeters strmeters players backgroundtracks buttonbar".split(" "),
+        mkitems(zip("songdb chmeters strmeters players buttonbar".split(" "),
                 (_('Music Database'), _('Channel Meters'), _('Output Meters'),
-                 _('Tabbed Area'), _('Background Tracks'), _('Button Bar'))), Gtk.CheckMenuItem)
+                 _('Tabbed Area'), _('Button Bar'))), Gtk.CheckMenuItem)
 
         if not songdb.have_songdb:
             self.songdbmenu_i.hide()
@@ -202,14 +203,26 @@ class MainMenu(Gtk.MenuBar, MenuMixin):
         self.submenu(self.jackmenu_i, "jack")
 
         self.submenu(self.helpmenu_i, "help")
-        self.build(self.helpmenu)((("about", Gtk.STOCK_ABOUT),),
-                                                            StockMenuItem)
+        self.build(self.helpmenu)((("about", _("About")),))
+
+        self.sep(self.helpmenu)
+        self.build(self.helpmenu)((("homepage",_("Homepage")),
+                                   ("host", _("Report Bugs"))
+                                   ))
 
         self.filemenu_i.connect("activate", self.cb_filemenu_activate)
+        self.homepagemenu_i.connect("activate", self.cb_homepage)
+        self.hostmenu_i.connect("activate", self.cb_host)
 
     def cb_filemenu_activate(self, menuitem):
         self.streamsmenu_i.emit("activate")
         self.recordersmenu_i.emit("activate")
+
+    def cb_homepage(self, _):
+        os.system("xdg-open https://idjc.sourceforge.io")
+
+    def cb_host(self, _):
+        os.system("xdg-open https://sourceforge.net/projects/idjc")
 
 
 class JackMenu(MenuMixin):
@@ -237,12 +250,12 @@ class JackMenu(MenuMixin):
         self.submenu(self.mixmenu_i, "mix")
         self.submenu(self.outputmenu_i, "output")
         self.submenu(self.othermenu_i, "other")
-        
+
         out2_in2 = itertools.cycle(("_out_",)*2 + ("_in_",)*2)
         out2_in1 = itertools.cycle(("_out_",)*2 + ("_in_",)*1)
         lr = itertools.cycle("lr")
         dj2_str2 = itertools.cycle(("dj",)*2 + ("str",)*2)
-    
+
         for prefix in "pl pr pi".split():
             for each in zip((prefix,) * 4, out2_in2, lr):
                 self.add_port(self.playersmenu, "".join(each))
@@ -258,10 +271,10 @@ class JackMenu(MenuMixin):
 
         for each in zip(("dsp",) * 4, out2_in2, lr):
             self.add_port(self.dspmenu, "".join(each))
-            
+
         for each in zip(dj2_str2, ("_out_",)*4, lr):
             self.add_port(self.mixmenu, "".join(each))
-            
+
         for i in range(1, PGlobs.num_micpairs * 2 + 1):
             self.add_port(self.channelsmenu, "ch_in_" + str(i))
 
@@ -270,21 +283,21 @@ class JackMenu(MenuMixin):
 
         self.add_port(self.othermenu, "midi_control")
         self.add_port(self.othermenu, "alarm_out")
-            
+
         self._port_data = []
-        
+
         self.sep(menu.jackmenu)
         mkitems((("reset", _('Reset')),))
         self.resetmenu_i.connect("activate", self._reset_confirm_dialog)
         set_tip(self.resetmenu_i,
                 _('Reset the JACK port connections to the default settings.'))
-        
+
     def _reset_confirm_dialog(self, menuitem):
         dialog = ConfirmationDialog("",
             _('<span size="12000" weight="bold">Reset all JACK port connections?</span>\n\n'
             'All currently established connections will be lost\n'
             'and replaced with defaults.'),
-            markup=True, action=Gtk.STOCK_YES, inaction=Gtk.STOCK_NO)
+            markup=True, action=_("Yes"), inaction=_("No"))
         dialog.set_transient_for(self.menu.get_toplevel())
         dialog.ok.connect("clicked", lambda w: self._reset_port_connections())
         dialog.show_all()
@@ -305,7 +318,7 @@ class JackMenu(MenuMixin):
 
     def cb_port_connections(self, mi, port, menu):
         reply = ""
-        
+
         if "_in_" in port or port.endswith("_in"):
             filter_ = "outputs"
         elif "_out_" in port or port.endswith("_out"):
@@ -315,7 +328,7 @@ class JackMenu(MenuMixin):
         else:
             print("JackMenu.port_connections: unknown port type")
             return
-            
+
         self.write("portread", "JFIL=%s\nJPRT=%s\nend\n" % (filter_, port))
         while not reply.startswith("jackports="):
             reply = self.read()
@@ -349,7 +362,7 @@ class JackMenu(MenuMixin):
         pbports = [x for x in reply[10:-1].split() if x.startswith(match)]
         return len(pbports)
 
-        
+
     def standard_save(self):
         self._port_data = self._get_port_data()
 
@@ -360,14 +373,14 @@ class JackMenu(MenuMixin):
         self._port_data = self._get_port_data()
 
         self._save(self._port_data, where)
-        
+
         if pm.profile is not None:
             arg = _("{0} profile={1}:{2} settings saved.").format(
                     PGlobs.app_shortform, self.session_type, pm.profile)
         else:
             arg = _("{0} session={1}:{2} settings saved.").format(
                     PGlobs.app_shortform, self.session_type, pm.session_name)
-        
+
         try:
             subprocess.call(["notify-send", arg])
         except OSError:
@@ -381,8 +394,8 @@ class JackMenu(MenuMixin):
             reply = ""
             while not reply.startswith("jackports="):
                 reply = self.read()
-            
-            element.append([str(unhexlify(x.lstrip("@-")), "ascii") 
+
+            element.append([str(unhexlify(x.lstrip("@-")), "ascii")
                            for x in reply[10:-1].split()
                            if x.startswith("@")])
             total.append(element)
@@ -459,12 +472,11 @@ class JackMenu(MenuMixin):
                 if port.startswith(restrict):
                     self.write("connect", "JPRT=%s\nJPT2=%s\nend\n" %
                                                                 (port, target))
- 
+
 class ColouredArea(Gtk.DrawingArea):
-    def __init__(self, colour=Gdk.Color(0, 0, 0)):
+    def __init__(self, colour=Gdk.RGBA(0.0, 0.0, 0.0, 1.0)):
         Gtk.DrawingArea.__init__(self)
         self.colour = colour
-        self.rect = Gdk.Rectangle(0, 0, 0, 0)
         self.connect("draw", self.cb_draw)
 
     def set_colour(self, colour):
@@ -473,29 +485,29 @@ class ColouredArea(Gtk.DrawingArea):
         height = self.get_allocated_height()
         self.queue_draw_area(0, 0, width, height)
 
-    def cb_draw(self, widget, cr):        
+    def cb_draw(self, widget, cr):
         context = self.get_style_context()
         width = self.get_allocated_width()
         height = self.get_allocated_height()
         cr.rectangle(0, 0, width, height)
-        Gdk.cairo_set_source_rgba(cr, Gdk.RGBA.from_color(self.colour))
+        Gdk.cairo_set_source_rgba(cr, self.colour)
         cr.fill()
 
 
 class ColourButton(Gtk.ColorButton):
     def get_text(self):
-        return self.get_color().to_string()
-        
+        return self.get_rgba().to_string()
+
     def set_text(self, string):
-        ok, color = Gdk.Color.parse(string)
-        if ok:
-            self.set_color(color)
+        rgba = Gdk.RGBA()
+        if rgba.parse(string):
+            self.set_rgba(rgba)
 
 
 class IconChooserButtonExtd(IconChooserButton):
     def get_text(self):
         return self.get_filename() or ""
-        
+
     def set_text(self, filename):
         self.set_filename(filename or None)
 
@@ -509,7 +521,7 @@ class MicButton(Gtk.ToggleButton):
     def flash(self, value):
         self.__flash = bool(value) and self.has_reminder_flash()
         self.__indicate()
-  
+
     @staticmethod
     def __cb_toggle(self):
         self.__indicate()
@@ -527,8 +539,8 @@ class MicButton(Gtk.ToggleButton):
                 self.set_colour(self.open_colour)
         else:
             self.set_colour(self.closed_colour)
-            
-            
+
+
     def set_colour(self, colour):
         for each in (self.ca1, self.ca2):
             each.set_colour(colour)
@@ -540,11 +552,11 @@ class MicButton(Gtk.ToggleButton):
 
         nsa = not opener_settings.button_numbers.get_active()
 
-        self.open_colour = opener_settings.open_colour.get_color()
-        self.closed_colour = opener_settings.closed_colour.get_color()
-        self.flash_colour = opener_settings.reminder_colour.get_color()
+        self.open_colour = opener_settings.open_colour.get_rgba()
+        self.closed_colour = opener_settings.closed_colour.get_rgba()
+        self.flash_colour = opener_settings.reminder_colour.get_rgba()
         self.has_reminder_flash = opener_tab.has_reminder_flash.get_active
-     
+
         hbox = Gtk.HBox()
         hbox.set_spacing(4)
 
@@ -556,7 +568,7 @@ class MicButton(Gtk.ToggleButton):
                 hbox.pack_start(ca, False)
 
             return ca
-            
+
         self.ca1 = make_indicator()
 
         lvbox = Gtk.VBox()
@@ -564,12 +576,14 @@ class MicButton(Gtk.ToggleButton):
 
         self._ident_label = MarkupLabel("", size=METER_TEXT_SIZE)
         self._ident_label.set_no_show_all(nsa)
-        self._ident_label.set_alignment(0.0, 0.0)
+        self._ident_label.props.halign = 0.0
+        self._ident_label.props.valign = 0.0
         lvbox.pack_start(self._ident_label, False)
-        
+
         self._chan_label3 = MarkupLabel("", size=METER_TEXT_SIZE)
         self._chan_label3.set_no_show_all(nsa)
-        self._chan_label3.set_alignment(0.0, 1.0)
+        self._chan_label3.props.halign = 0.0
+        self._chan_label3.props.valign = 1.0
         lvbox.pack_end(self._chan_label3, False)
 
         pad = Gtk.HBox()
@@ -580,7 +594,7 @@ class MicButton(Gtk.ToggleButton):
         if text:
             self._text_label.set_text(text)
             hbox.pack_start(self._text_label, False)
-      
+
         self._icon_image = Gtk.Image()
         icon = opener_tab.icb.get_filename()
         try:
@@ -593,18 +607,20 @@ class MicButton(Gtk.ToggleButton):
 
         pad = Gtk.HBox()
         hbox.pack_start(pad)
-        
+
         rvbox = Gtk.VBox()
         hbox.pack_start(rvbox, False)
-        
+
         self._chan_label1 = MarkupLabel("", size=METER_TEXT_SIZE)
         self._chan_label1.set_no_show_all(nsa)
-        self._chan_label1.set_alignment(1.0, 0.0)
+        self._chan_label1.halign = 1.0
+        self._chan_label1.valign = 0.0
         rvbox.pack_start(self._chan_label1, False)
 
         self._chan_label2 = MarkupLabel("", size=METER_TEXT_SIZE)
         self._chan_label2.set_no_show_all(nsa)
-        self._chan_label2.set_alignment(1.0, 1.0)
+        self._chan_label2.props.halign = 1.0
+        self._chan_label2.props.valign = 1.0
         rvbox.pack_end(self._chan_label2, False)
 
         self.ca2 = make_indicator()
@@ -617,11 +633,11 @@ class MicButton(Gtk.ToggleButton):
             to_close = "!" + to_close
 
         self._ident_label.set_text("(%d)%s" % (opener_tab.ident, to_close))
-        
+
         def labeltext():
             for blk in itertools.zip_longest(*(iter(mic_agc_list),) * 4):
                 yield ",".join(x.ui_name for x in blk if x is not None)
-        
+
         for text, label in zip(labeltext(),
                     (self._chan_label1, self._chan_label2, self._chan_label3)):
             label.set_text(text)
@@ -629,12 +645,12 @@ class MicButton(Gtk.ToggleButton):
         self.connect("toggled", self.__cb_toggle)
         self.__flash = False
         self.show_all()
-    
-    
+
+
 
 class OpenerTab(Gtk.VBox):
     __gsignals__ = { "changed" : (
-                        GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE, ())}
+                        GObject.SignalFlags.RUN_LAST, GObject.TYPE_NONE, ())}
 
     def __init__(self, ident):
         Gtk.VBox.__init__(self)
@@ -644,27 +660,27 @@ class OpenerTab(Gtk.VBox):
         self.label.show()
         self.set_ident(ident)
         self.activedict = {}
-        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
+        sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
         lhbox = Gtk.HBox()
         lhbox.set_spacing(3)
-        label = Gtk.Label(_('Text'))
+        label = Gtk.Label.new(_('Text'))
         lhbox.pack_start(label, False)
         self.button_text = Gtk.Entry()
         set_tip(self.button_text, _("The opener button's text."))
         self.button_text.connect("changed", lambda w: self.emit("changed"))
         sg.add_widget(self.button_text)
         lhbox.pack_start(self.button_text)
-        
+
         spc = Gtk.HBox()
         lhbox.pack_start(spc, False, padding=2)
-        
-        label = Gtk.Label(_('Icon'))
+
+        label = Gtk.Label.new(_('Icon'))
         lhbox.pack_start(label, False)
-        
-        self.icon_chooser = IconPreviewFileChooserDialog("Choose An Icon",
-                        buttons = (Gtk.STOCK_CLEAR, Gtk.ResponseType.NONE,
-                                      Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                      Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        self.icon_chooser = IconPreviewFileChooserDialog(title="Choose An Icon",
+                                                         action=Gtk.FileChooserAction.OPEN)
+        self.icon_chooser.add_button(_("Clear"), Gtk.ResponseType.NONE)
+        self.icon_chooser.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        self.icon_chooser.add_button(_("OK"), Gtk.ResponseType.OK)
         self.icb = IconChooserButtonExtd(self.icon_chooser)
         set_tip(self.icb, _("The opener button's icon."))
         self.icb.connect("filename-changed", lambda w, r: self.emit("changed"))
@@ -679,15 +695,20 @@ class OpenerTab(Gtk.VBox):
         ' the largest value of all the currently open buttons.'))
 
         self.pack_start(hbox, False)
-        label = Gtk.Label(_('The amount of headroom required (dB)'))
-        label.set_alignment(0.0, 0.5)
+        label = Gtk.Label.new(_('The amount of headroom required (dB)'))
+        label.props.halign = 0.0
+        label.props.valign = 0.5
         hbox.pack_start(label, False)
-        self.headroom = Gtk.SpinButton.new(
-                                Gtk.Adjustment(0.0, 0.0, 32.0, 0.5), 0, digits=1)
+        self.headroom = Gtk.SpinButton.new(Gtk.Adjustment(value=0.0,
+                                                          lower=0.0,
+                                                          upper=32.0,
+                                                          step_increment=0.5),
+                                                          climb_rate=0,
+                                                          digits=1)
         self.headroom.connect("value-changed", lambda w: self.emit("changed"))
         hbox.pack_end(self.headroom, False)
-        
-        self.has_reminder_flash = Gtk.CheckButton(
+
+        self.has_reminder_flash = Gtk.CheckButton.new_with_label(
                             _('This button will flash as a reminder to close'))
         set_tip(self.has_reminder_flash, _("After a number of seconds where a "
         "main player is active this button's status indicator will start to "
@@ -695,8 +716,8 @@ class OpenerTab(Gtk.VBox):
         "player stops."))
 
         self.pack_start(self.has_reminder_flash, False)
-        
-        self.is_microphone = Gtk.CheckButton(
+
+        self.is_microphone = Gtk.CheckButton.new_with_label(
                     _('This button is to be treated as a microphone opener'))
 
         set_tip(self.is_microphone, _("The button will be grouped with the "
@@ -706,13 +727,13 @@ class OpenerTab(Gtk.VBox):
 
         self.is_microphone.connect("toggled", lambda w: self.emit("changed"))
         self.pack_start(self.is_microphone, False)
-        
-        self.freewheel_cancel = Gtk.CheckButton(
+
+        self.freewheel_cancel = Gtk.CheckButton.new_with_label(
                 _('This button will automatically cancel JACK freewheel mode'))
         self.pack_start(self.freewheel_cancel, False)
         set_tip(self.freewheel_cancel, _('This should be set for all buttons'
                 ' that control input from a live sound source or device.'))
-        
+
         frame = Gtk.Frame.new(" %s " % _('Button Open Triggers'))
         self.pack_start(frame, False, padding=3)
         self.open_triggers = collections.OrderedDict()
@@ -725,7 +746,7 @@ class OpenerTab(Gtk.VBox):
                 _("'%s' control") % _('Player Stop 2'),
                 _('Announcements')),
                 itertools.cycle((lvbox, rvbox))):
-            cb = Gtk.CheckButton(t)
+            cb = Gtk.CheckButton.new_with_label(t)
             self.open_triggers[w] = cb
             col.pack_start(cb, False)
             self.activedict["oc_" + w] = cb
@@ -734,18 +755,18 @@ class OpenerTab(Gtk.VBox):
         for each in (lvbox, rvbox):
             hbox.pack_start(each, False)
         frame.add(hbox)
-        
+
         frame = Gtk.Frame.new(" %s " % _('When opened close these other buttons'))
         self.pack_start(frame, False, padding=3)
         self.closer_hbox = Gtk.HBox()
         self.closer_hbox.set_border_width(3)
         for i in range(1, ident):
-            cb = Gtk.CheckButton(str(i))
+            cb = Gtk.CheckButton.new_with_label(str(i))
             cb.connect("toggled", lambda w: self.emit("changed"))
             self.closer_hbox.pack_start(cb)
             self.activedict["close_%d_button" % i] = cb
         frame.add(self.closer_hbox)
-        
+
         frame = Gtk.Frame.new(" %s " % _('Shell Command'))
         set_tip(frame, _("Mostly useful issuing 'amixer' commands, in "
                                             "particular for setting capture."))
@@ -754,28 +775,29 @@ class OpenerTab(Gtk.VBox):
         frame.add(ivbox)
         ivbox.set_border_width(6)
         ivbox.set_spacing(3)
-        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
+        sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
         def enbox(l, r):
             hbox = Gtk.HBox()
             hbox.set_spacing(3)
-            label = Gtk.Label(l)
-            label.set_alignment(0.0, 0.5)
+            label = Gtk.Label.new(l)
+            label.props.halign = 0.0
+            label.props.valign = 0.5
             hbox.pack_start(label, False)
             hbox.pack_start(r)
             sg.add_widget(r)
             return hbox
-            
+
         self.shell_on_open = Gtk.Entry()
         self.shell_on_close = Gtk.Entry()
         ivbox.pack_start(enbox(_('On open'), self.shell_on_open), False)
         ivbox.pack_start(enbox(_('On close'), self.shell_on_close), False)
-        
+
         self.activedict.update({
             "reminderflash" : self.has_reminder_flash,
             "isamicrophone" : self.is_microphone,
             "cancelsfreewheel" : self.freewheel_cancel
         })
-        
+
         self.valuesdict = {
             "headroom" : self.headroom
         }
@@ -786,7 +808,7 @@ class OpenerTab(Gtk.VBox):
             "shell_onopen" : self.shell_on_open,
             "shell_onclose" : self.shell_on_close,
         }
-      
+
         self.button_was_on = False
 
     def set_ident(self, ident):
@@ -794,7 +816,7 @@ class OpenerTab(Gtk.VBox):
         self.ident = ident
 
     def add_closer(self, closer_ident):
-        cb = Gtk.CheckButton(str(closer_ident))
+        cb = Gtk.CheckButton.new_with_label(str(closer_ident))
         if closer_ident == self.ident:
             cb.set_sensitive(False)
         else:
@@ -805,23 +827,23 @@ class OpenerTab(Gtk.VBox):
 
 
 class OpenerSettings(Gtk.Frame):
-    __gsignals__ = { "changed" : (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
-                                                    (GObject.TYPE_PYOBJECT,))}
+    __gsignals__ = { "changed" : (GObject.SignalFlags.RUN_LAST,
+                                  GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,))}
 
     def __init__(self):
         Gtk.Frame.__init__(self)
         self.set_label(" %s " % _('Main Panel Opener Buttons'))
         self.set_border_width(3)
-        
+
         def changed(*args):
             self.emit("changed", None)
-        
+
         vbox = Gtk.VBox()
         self.add(vbox)
         vbox.set_border_width(7)
         vbox.set_spacing(3)
 
-        self.button_numbers = Gtk.CheckButton(
+        self.button_numbers = Gtk.CheckButton.new_with_label(
                 _('Indicate button numbers and associated channel numbers'))
 
         set_tip(self.button_numbers, _("A useful feature to have switched on "
@@ -829,7 +851,7 @@ class OpenerSettings(Gtk.Frame):
 
         self.button_numbers.connect("toggled", changed)
         vbox.pack_start(self.button_numbers, False)
-        
+
         frame = Gtk.Frame()
         frame.set_label(" %s " % _('Status Indicator Appearance'))
 
@@ -842,38 +864,39 @@ class OpenerSettings(Gtk.Frame):
         hbox.set_border_width(3)
         hbox.set_spacing(3)
         frame.add(hbox)
-        
-        hbox.pack_start(Gtk.Label(_('Width')), False)
+
+        hbox.pack_start(Gtk.Label.new(_('Width')), False)
         self.indicator_width = Gtk.SpinButton(
-            adjustment=Gtk.Adjustment(4.0, 0.0, 10.0, 1.0), digits=0)
+            adjustment=Gtk.Adjustment(value=4.0, lower=0.0, upper=10.0, step_increment=1.0), digits=0)
         self.indicator_width.connect("value-changed", changed)
         hbox.pack_start(self.indicator_width, False)
         hbox.pack_start(Gtk.HBox())
-        
-        hbox.pack_start(Gtk.Label(_('Opened')), False)
+
+        hbox.pack_start(Gtk.Label.new(_('Opened')), False)
         self.open_colour = ColourButton()
-        self.open_colour.set_color(Gdk.Color.from_floats(0.95, 0.2, 0.2))
+        self.open_colour.set_rgba(Gdk.RGBA(0.95, 0.2, 0.2, 1.0))
         hbox.pack_start(self.open_colour, False)
         hbox.pack_start(Gtk.HBox())
-        hbox.pack_start(Gtk.Label(_('Closed')), False)
-        col = Gdk.Color.parse("gray")[1]
+        hbox.pack_start(Gtk.Label.new(_('Closed')), False)
+        col = Gdk.RGBA()
+        col.parse("gray")
         self.closed_colour = ColourButton()
-        self.closed_colour.set_color(col)
+        self.closed_colour.set_rgba(col)
         hbox.pack_start(self.closed_colour, False)
         hbox.pack_start(Gtk.HBox())
-        hbox.pack_start(Gtk.Label(_('Remind')), False)
+        hbox.pack_start(Gtk.Label.new(_('Remind')), False)
         self.reminder_colour = ColourButton()
-        self.reminder_colour.set_color(col)
+        self.reminder_colour.set_rgba(col)
         hbox.pack_start(self.reminder_colour, False)
-      
+
         for each in (self.open_colour, self.closed_colour,
                                                         self.reminder_colour):
             each.connect("color-set", changed)
-      
+
         self.notebook = Gtk.Notebook()
         vbox.pack_start(self.notebook, False, padding=3)
         self.show_all()
-    
+
         self.activedict = {
             "btnnumbers" : self.button_numbers,
         }
@@ -883,11 +906,10 @@ class OpenerSettings(Gtk.Frame):
             "btncolour_closed" : self.closed_colour,
             "btncolour_remind" : self.reminder_colour,
         }
-    
+
         self.valuesdict = {
             "btnreminderwidth": self.indicator_width,
         }
-        
 
     def add_channel(self):
         tab = OpenerTab(len(self.notebook) + 1)
@@ -897,8 +919,7 @@ class OpenerSettings(Gtk.Frame):
         self.notebook.foreach(add_closer)
         tab.show_all()
         tab.connect("changed", lambda w: self.emit("changed", tab))
-        
-        
+
     def finalise(self):
         for tab in self.notebook.get_children():
             for attrname in ("activedict", "valuesdict", "textdict"):
@@ -907,12 +928,12 @@ class OpenerSettings(Gtk.Frame):
                 for key, val in src.items():
                     dest[key + "_%d" % tab.ident] = val
 
-    
+
 class MicOpener(Gtk.HBox):
     @property
     def any_mic_selected(self):
         return self._any_mic_selected
-    
+
     def notify_others(self, freewheel_cancel=False):
         r = self.approot
         if freewheel_cancel:
@@ -960,7 +981,7 @@ class MicOpener(Gtk.HBox):
 
     def cb_reconfigure(self, widget, trigger=None):
         self.new_button_set()
-        
+
     def new_button_set(self):
         # Clear away old button widgets.
         self.foreach(lambda x: x.destroy())
@@ -973,7 +994,7 @@ class MicOpener(Gtk.HBox):
         aux_group_list = [[] for x in range(PGlobs.num_micpairs * 2)]
         ot = self.opener_settings.notebook.get_children()
         mic_qty = aux_qty = 0
-        
+
         # Categorisation of channels into button groups.
         for m in self.mic_list:
             mode = m.mode.get_active()
@@ -993,8 +1014,8 @@ class MicOpener(Gtk.HBox):
 
         # Opener buttons built here.
         def build(group_list, closer):
-            image = Gtk.Image.new_from_stock(
-                                        Gtk.STOCK_CLOSE, Gtk.IconSize.BUTTON)
+            image = Gtk.Image.new_from_icon_name("process-stop-symbolic",
+                                                 Gtk.IconSize.BUTTON)
             closer_button = Gtk.Button()
             closer_button.set_image(image)
             closer_button.show_all()
@@ -1015,18 +1036,18 @@ class MicOpener(Gtk.HBox):
                             active = True
                         self.mic2button[m.ui_name] = mb
                     mb.connect("toggled", self.cb_mictoggle, mic_list)
-                    self.add(mb)
+                    self.pack_start(mb)
                     mb.show()
                     mb.block_shell_command = mb.opener_tab.button_was_on
                     mb.set_active(active)
                     mb.block_shell_command = False
-                    
+
                     closer_button.connect("clicked",
                                     lambda w, btn: btn.set_active(False), mb)
 
             if closer == "right":
                 self.pack_start(closer_button, False)
-                
+
         if aux_qty:
             build(aux_group_list, closer=("right" if aux_qty > 1 else None))
             if mic_qty:
@@ -1034,21 +1055,21 @@ class MicOpener(Gtk.HBox):
                 spc.set_size_request(3, -1)
                 self.pack_start(spc, False)
                 spc.show()
-                
+
         if mic_qty:
             build(mic_group_list, closer=("left" if mic_qty > 1 else None))
-            
+
 
         if self._forced_on_mode:
             self.force_all_on(True)
-                
+
         if not self.mic2button:
             # TC: A placeholder text for when there are no opener buttons.
-            l = Gtk.Label(_('No Channel Opener Buttons'))
+            l = Gtk.Label.new(_('No Channel Opener Buttons'))
             l.set_sensitive(False)
-            self.add(l)
+            self.pack_start(l)
             l.show()
-            
+
         # Categorisation of channels according to type a or m (aux or mic)
         channel_modes = ['a' for i in range(PGlobs.num_micpairs * 2)]
         for button in mic_group_list:
@@ -1059,8 +1080,7 @@ class MicOpener(Gtk.HBox):
                                                     % "".join(channel_modes))
         self.notify_others()
 
-      
-    @threadslock
+
     def cb_flash_timeout(self):
 
         if self._flash_test() and not self._forced_on_mode:
@@ -1068,17 +1088,17 @@ class MicOpener(Gtk.HBox):
         else:
             self._flashing_timer = 0
 
-        flash_value = bool((self._flashing_timer % 2) 
+        flash_value = bool((self._flashing_timer % 2)
                                             if self._flashing_timer > 7 else 0)
 
         for mb in self.buttons:
             mb.flash = flash_value
 
         return True
-      
+
     def force_all_on(self, val):
         """Switch on all front panel mic buttons and make them insensitive."""
-        
+
         self._forced_on_mode = val
         for mb in self.buttons:
             if mb.opener_tab.is_microphone.get_active():
@@ -1099,7 +1119,7 @@ class MicOpener(Gtk.HBox):
 
     def oc(self, mic, val):
         """Perform open/close."""
-        
+
         try:
             self.mic2button[mic].set_active(val)
         except:
@@ -1111,7 +1131,7 @@ class MicOpener(Gtk.HBox):
                     elif mode == 3:
                         m.partner.open.set_active(val)
                     break
-    
+
     def get_opener_button(self, ix):
         try:
             m = self.mic_list[ix]
@@ -1133,7 +1153,7 @@ class MicOpener(Gtk.HBox):
 
     def open(self, val):
         self.oc(val, True)
-        
+
     def close(self, val):
         self.oc(val, False)
 
@@ -1141,12 +1161,13 @@ class MicOpener(Gtk.HBox):
         """mic: AGCControl object passed here to register it with this class."""
 
         self.opener_settings.add_channel()
+
         self.mic_list.append(mic)
         for attr, signal in zip (
                     ("mode", "group", "no_front_panel_opener", "groups_adj"),
                     ("changed", "toggled", "toggled", "notify::value")):
             getattr(mic, attr).connect(signal, self.cb_reconfigure)
-            
+
     def finalise(self):
         self.opener_settings.finalise()
 
@@ -1170,56 +1191,35 @@ class MicOpener(Gtk.HBox):
 
 
 class PaddedVBox(Gtk.VBox):
-    def vbox_pack_start(self, *args, **kwargs):
-        self.vbox.pack_start(*args, **kwargs)
-    def vbox_add(self, *args, **kwargs):
-        self.vbox.add(*args, **kwargs)
-
     def __init__(self, l, t, r, b, s):
         Gtk.VBox.__init__(self)
-        d = Gtk.VBox()
-        self.pack_start(d, False, False, t)
-        d.show()
-        d = Gtk.VBox()
-        self.pack_end(d, False, False, b)
-        d.show()
-        h = Gtk.HBox()
-        self.pack_start(h, True, True)
-        h.show()
-        d = Gtk.VBox()
-        h.pack_start(d, False, False, l)
-        d.show()
-        d = Gtk.VBox()
-        h.pack_end(d, False, False, r)
-        d.show()
-        self.vbox = Gtk.VBox()
-        self.vbox.set_spacing(s)
-        h.pack_start(self.vbox)
-        self.vbox.show()        
-        self.pack_start = self.vbox_pack_start
-        self.add = self.vbox_add
+        self.set_spacing(s)
+        self.set_margin_start(l)
+        self.set_margin_top(t)
+        self.set_margin_end(r)
+        self.set_margin_bottom(b)
 
 
 def make_meter_scale():  # Vertical meter scale using dB values.
     scalebox = Gtk.VBox()
-    def TA(text, y_align):
-        label = MarkupLabel(text, size=str(METER_TEXT_SIZE))
-        alignment = Gtk.Alignment.new(0, y_align, 0, 0)
-        alignment.add(label)
+    def x(text, yalign):
+        label = MarkupLabel(text, size=str(METER_TEXT_SIZE), font_family="monospace")
+        label.set_yalign(yalign)
+        label.set_xalign(1.0)
+        label.set_vexpand(True)
+        scalebox.add(label)
         label.show()
-        scalebox.add(alignment)
-        alignment.show()
-    
-    TA("  0", 0)  # Displayed number of dB, vertical alignment.
-    TA(" -6", 0)
-    TA("-12", 0.25)
-    TA("-18", 0.5)
-    TA("-24", 0.75)
-    TA("-30", 1)
-    TA("-36", 1)
+
+    x("  0", 0)  # Displayed number of dB, vertical alignment.
+    x(" -6", .05)
+    x("-12", 0.27)
+    x("-18", 0.5)
+    x("-24", 0.73)
+    x("-30", .95)
+    x("-36", 1)
     return scalebox
-    
-    
+
+
 def make_meter_unit(text, l_meter, r_meter):
     mic_peak_box = Gtk.VBox()
     mic_peak_box.set_border_width(0)
@@ -1230,11 +1230,11 @@ def make_meter_unit(text, l_meter, r_meter):
     frame.add(hbox)
     label = MarkupLabel(text, size=str(METER_TEXT_SIZE))
     labelbox = Gtk.HBox()
-    labelbox.add(label)
+    labelbox.pack_start(label, True)
     label.show()
     mic_peak_box.pack_start(labelbox, False, False, 0)
     labelbox.show()
-    mic_peak_box.add(frame)
+    mic_peak_box.pack_start(frame)
     frame.show()
     hbox.show()
     l_meter.set_size_request(16, -1)
@@ -1247,8 +1247,8 @@ def make_meter_unit(text, l_meter, r_meter):
     l_meter.show()
     r_meter.show()
     return mic_peak_box
- 
- 
+
+
 def make_stream_meter_unit(text, meters):
     outer_vbox = Gtk.VBox()
     outer_vbox.set_border_width(0)
@@ -1258,7 +1258,7 @@ def make_stream_meter_unit(text, meters):
     frame.add(inner_vbox)
     label = MarkupLabel(text, size=str(METER_TEXT_SIZE))
     labelbox = Gtk.HBox()
-    labelbox.add(label)
+    labelbox.pack_start(label, True)
     label.show()
     outer_vbox.pack_start(labelbox, False, False, 0)
     labelbox.show()
@@ -1271,7 +1271,7 @@ def make_stream_meter_unit(text, meters):
         hbox.set_spacing(1)
         inner_vbox.add(hbox)
         hbox.show()
-        label = Gtk.Label(str(num + 1))
+        label = Gtk.Label.new(str(num + 1))
         hbox.pack_start(label, False, False, 0)
         label.show()
         vbox = Gtk.VBox()
@@ -1283,33 +1283,34 @@ def make_stream_meter_unit(text, meters):
     ' means stream packets are being discarded because of network congestion. '
     'Partial red means the send buffer is partially full indicating difficulty'
     ' communicating with the server. Green means everything is okay.'))
-    
+
     frame = Gtk.Frame()  # Main panel listener figures box.
     frame.set_label_align(0.5, 0.5)
-    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(
-                            PGlobs.themedir / "listenerphones.png", 20, 16)
-    image = Gtk.Image.new_from_pixbuf(pixbuf)
+    #pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(
+    #                        PGlobs.themedir / "listenerphones.png", 20, 16)
+    #image = Gtk.Image.new_from_pixbuf(pixbuf)
+    image = Gtk.Image.new_from_icon_name("audio-headphones-symbolic", Gtk.IconSize.MENU)
     frame.set_label_widget(image)
     image.show()
-    
+
     frame.set_border_width(4)
     inner_vbox = Gtk.VBox()
     frame.add(inner_vbox)
     inner_vbox.show()
-    connections = Gtk.Label("0")
+    connections = Gtk.Label.new("0")
     inner_vbox.add(connections)
     connections.show()
     outer_vbox.pack_start(frame, False, False, 0)
     frame.show()
     set_tip(frame,
                 _('The combined total number of listeners in all server tabs.'))
-    
+
     return outer_vbox, connections
 
 
 class StackedMeter(Gtk.Frame):
     """Base class for meters that have a stack of colours."""
-    
+
     def __init__(self, lower=0.0, upper=1.0):
         Gtk.Frame.__init__(self)
         self.set_border_width(3)
@@ -1333,7 +1334,7 @@ class StackedMeter(Gtk.Frame):
     @property
     def lower(self):
         return self._lower
-        
+
     @property
     def upper(self):
         return self._upper
@@ -1349,7 +1350,7 @@ class StackedMeter(Gtk.Frame):
     @property
     def horizontal(self):
         return self._horizontal
-        
+
     @horizontal.setter
     def horizontal(self, horizontal):
         self._horizontal = bool(horizontal)
@@ -1359,14 +1360,14 @@ class StackedMeter(Gtk.Frame):
            Size will be in units of scale, not pixels.
         """
         self.new_jobs.append((rgba.copy(), size))
-        
+
     def cb_state_flags(self, widget, data):
         if not self.is_sensitive() and self.is_visible():
             self.draw()
-        
+
     def draw(self):
         """Done stacking colours so now show what we have."""
-        
+
         self.jobs = self.new_jobs
         self.new_jobs = []
         width = self.da.get_allocated_width()
@@ -1420,22 +1421,22 @@ class StreamMeter(StackedMeter):
         self.active = self.flash = False
         self.set_active(False)
         self.draw()
-        
+
     def set_value(self, value):
         self.value = min(max(float(value), self.lower), self.upper)
         if self.value != self.old_value:
             self.draw()
-            
+
     def set_flash(self, flash):
         if flash != self.flash:
             self.flash = flash
             self.draw()
-            
+
     def set_active(self, active):
         if active != self.active:
             self.active = active
             self.draw()
-            
+
     def draw(self):
         if not self.active or self.flash:
             self.stack(self.grey, self.upper - self.lower)
@@ -1445,14 +1446,14 @@ class StreamMeter(StackedMeter):
             self.stack(self.green, self.upper - self.lower - self.value)
             StackedMeter.draw(self)
 
-        
+
 class LevelBandedMeter(StackedMeter):
     def __init__(self, lower, lower_mid, upper_mid, upper):
         StackedMeter.__init__(self, float(lower), float(upper))
-        
+
         assert lower <= lower_mid <= upper_mid <= upper
         self.thresholds = float(lower), float(lower_mid), float(upper_mid), float(upper)
-        self.old_value = float(lower)
+        self.old_value = float(lower) - 1.0
 
         # Muted colours for the level bands.
         self.colours = Gdk.RGBA(), Gdk.RGBA(), Gdk.RGBA(), Gdk.RGBA()
@@ -1461,7 +1462,7 @@ class LevelBandedMeter(StackedMeter):
                                                 "#D05044",  # Red
                                                 "darkgray")):
             colour.parse(value)
-        
+
     def set_value(self, value):
         if value != self.old_value:
             value = float(min(max(value, self.thresholds[0]), self.thresholds[3]))
@@ -1471,15 +1472,15 @@ class LevelBandedMeter(StackedMeter):
             for i in range(3):
                 sizes[i] = min(value, self.thresholds[i + 1]) - self.thresholds[0] - sum(sizes)
             sizes[3] = self.thresholds[3] - self.thresholds[0] - sum(sizes)
-            
+
             for colour, size in zip(self.colours, sizes):
                 self.stack(colour, size)
             self.draw()
-            
+
     def get_value(self):
         return self.old_value
 
-                
+
 class AttenuationMeter(StackedMeter):
     def __init__(self, lower, upper):
         StackedMeter.__init__(self, lower, upper)
@@ -1494,13 +1495,13 @@ class AttenuationMeter(StackedMeter):
         self.background_colour.parse("darkgray")
         self.compressor = self.deesser = self.noise_gate = 0.0
         self.connect("state-flags-changed", self.cb_state_flags)
-        
+
     def set_values(self, compressor, deesser, noise_gate, force=False):
-        if not force and (compressor == self.compressor and 
+        if not force and (compressor == self.compressor and
                           deesser == self.deesser and
                           noise_gate == self.noise_gate):
             return
-        
+
         self.compressor = compressor
         self.deesser = deesser
         self.noise_gate = noise_gate
@@ -1527,7 +1528,7 @@ class VUMeter(LevelBandedMeter):
 
     def set_value(self, value):
         value = min(max(float(value), self.lower), self.upper)
-            
+
         self.gen6 = self.gen5
         self.gen5 = self.gen4
         self.gen4 = self.gen3
@@ -1536,9 +1537,9 @@ class VUMeter(LevelBandedMeter):
         self.gen1 = value
 
         # Weighted mean over 300ms.
-        value = (5.0 * self.gen1 + 6.0 * self.gen2 + 4.0 * self.gen3 + 
+        value = (5.0 * self.gen1 + 6.0 * self.gen2 + 4.0 * self.gen3 +
                  3.0 * self.gen4 + 2.0 * self.gen5 + self.gen6 ) / 21.0
-                                
+
         LevelBandedMeter.set_value(self, value)
 
 
@@ -1593,7 +1594,7 @@ class MicMeter(Gtk.VBox):
             text = self.agc.alt_name.get_text().strip()
             if not text:
                 return False
-            label = Gtk.Label(text)
+            label = Gtk.Label.new(text)
             tooltip.set_custom(label)
             label.show()
             return True
@@ -1602,11 +1603,8 @@ class MicMeter(Gtk.VBox):
 
     def __init__(self, labelbasetext, index):
         Gtk.VBox.__init__(self)
-        self.set_border_width(0)
         lhbox = Gtk.HBox()
-        pad = Gtk.VBox()
-        lhbox.add(pad)
-        pad.show()
+        lhbox.set_halign(Gtk.Align.CENTER)
         lhbox.set_spacing(2)
         self.led_onpb = GdkPixbuf.Pixbuf.new_from_file_at_size(
             FGlobs.pkgdatadir / "led_lit_green_black_border_64x64.png", 7, 7)
@@ -1616,13 +1614,10 @@ class MicMeter(Gtk.VBox):
         lhbox.pack_start(self.led, False, False)
         self.set_led(False)
         self.led.show()
-        labeltext = labelbasetext + " " + str(index)
+        labeltext = f"{labelbasetext} {str(index)}"
         label = MarkupLabel(labeltext, size=str(METER_TEXT_SIZE))
         lhbox.pack_start(label, False, False)
         label.show()
-        pad = Gtk.VBox()
-        lhbox.add(pad)
-        pad.show()
         self.pack_start(lhbox, False, False)
         lhbox.show()
         frame = Gtk.Frame()
@@ -1633,7 +1628,7 @@ class MicMeter(Gtk.VBox):
         hbox.set_border_width(1)
         frame.add(hbox)
         hbox.show()
-        
+
         self.peak = PeakHoldMeter()
         self.peak.set_size_request(16, -1)
         hbox.pack_start(self.peak, False, False)
@@ -1666,18 +1661,18 @@ class RecIndicator(Gtk.HBox):
         self.image = Gtk.Image()
         self.pack_start(self.image, False)
         self.image.show()
-        
+
         self.led = [GdkPixbuf.Pixbuf.new_from_file_at_size(
             FGlobs.pkgdatadir / (which + ".png"), 9, 9) for which in (
             "led_unlit_clear_border_64x64", "led_lit_red_black_border_64x64",
             "led_lit_amber_black_border_64x64")]
-        self.set_indicator("clear") 
+        self.set_indicator("clear")
 
 
 class RecordingPanel(Gtk.VBox):
     def __init__(self, howmany):
         Gtk.VBox.__init__(self)
-        
+
         # TC: Record as in, to make a recording.
         label = MarkupLabel(" %s " % _('Record'), size=str(METER_TEXT_SIZE))
         self.pack_start(label)
@@ -1710,24 +1705,27 @@ class idjc_shutdown_dialog:
             widget.set_urgency_hint(True)
         else:
             widget.set_urgency_hint(False)
-    
+
     def respond(self, dialog, response, actionyes, actionno):
         if response == Gtk.ResponseType.OK:
             print("Dialog quit")
             if actionyes is not None:
                 actionyes()
-        if response == Gtk.ResponseType.DELETE_EVENT or \
-                                                response == Gtk.ResponseType.CANCEL:
+
+        rt = Gtk.ResponseType
+        if response in (rt.DELETE_EVENT, rt.CANCEL):
             print("Dialog keep running")
             if actionno is not None:
                 actionno()
         dialog.destroy()
 
-    def __init__(self, window_group = None, actionyes = None, actionno = None,
-                                                        additional_text = None):
-        dialog = Gtk.Dialog(pm.title_extra.strip(), None, Gtk.DialogFlags.MODAL |
-                        Gtk.DialogFlags.DESTROY_WITH_PARENT, (Gtk.STOCK_CANCEL,
-                        Gtk.ResponseType.CANCEL, Gtk.STOCK_QUIT, Gtk.ResponseType.OK))
+    def __init__(self, window_group=None, actionyes=None, actionno=None,
+                                                        additional_text=None):
+        dialog = Gtk.Dialog(title=pm.title_extra.strip(),
+                            modal=True,
+                            destroy_with_parent=True)
+        dialog.add_buttons(_("Cancel"), Gtk.ResponseType.CANCEL,
+                           _("Quit"), Gtk.ResponseType.OK)
         if window_group is not None:
             window_group.add_window(dialog)
         dialog.set_resizable(False)
@@ -1736,25 +1734,26 @@ class idjc_shutdown_dialog:
         dialog.connect("window-state-event", self.window_attn)
         dialog.set_border_width(6)
         dialog.vbox.set_spacing(12)
-        
+
         hbox = Gtk.HBox(False, 20)
         hbox.set_spacing(12)
         dialog.get_content_area().add(hbox)
-        image = Gtk.Image.new_from_stock(
-                                Gtk.STOCK_DIALOG_WARNING, Gtk.IconSize.DIALOG)
-        image.set_alignment(0.5, 0)
+        image = Gtk.Image.new_from_icon_name("dialog-warning", Gtk.IconSize.DIALOG)
+        image.props.halign = 0.5
+        image.props.valign = 0.0
         hbox.pack_start(image, False)
 
         vbox = Gtk.VBox()
         hbox.pack_start(vbox, True, True, 0)
         vbox.show()
-        
+
         if additional_text is not None:
             if type(additional_text) is str:
                 additional_text = additional_text.splitlines()
             for each in additional_text:
                 label = Gtk.Label()
-                label.set_alignment(0.0, 0.5)
+                label.props.halign = 0.0
+                label.props.valign = 0.5
                 label.set_markup(each)
                 vbox.pack_start(label, False)
         dialog.show_all()
@@ -1777,7 +1776,7 @@ class MainWindow(dbus.service.Object):
                         self.jingles.jmute_adj[0].get_value(),
                         self.jingles.jvol_adj[1].get_value(),
                         self.jingles.jmute_adj[1].get_value(),
-                        self.jingles.ivol_adj.get_value(),
+                        self.background.ivol_adj.get_value(),
                         self.mixbackadj.get_value(),
                         self.jingles.playing,
                         self.player_left.stream.get_active(),
@@ -1790,7 +1789,7 @@ class MainWindow(dbus.service.Object):
                         self.player_left.flush,
                         self.player_right.flush,
                         self.jingles.flush,
-                        self.jingles.interludeflush,
+                        self.background.flush,
                         self.simplemixer,
                         self.alarm,
                         self.mixermode,
@@ -1802,24 +1801,24 @@ class MainWindow(dbus.service.Object):
                         self.prefs_window.speed_variance.get_active(),
                         self.prefs_window.dj_aud_adj.get_value(),
                         self.crosspattern.get_active(),
-                        self.dsp_button.get_active(), 
-                        self.jingles.interlude.pause.get_active(),
-                        self.jingles.interlude.stream.get_active(),
-                        self.jingles.interlude.listen.get_active(),
-                        self.jingles.interlude.force.get_active(),
+                        self.dsp_button.get_active(),
+                        self.background.player.pause.get_active(),
+                        self.background.player.stream.get_active(),
+                        self.background.player.listen.get_active(),
+                        self.background.player.force.get_active(),
                         self.prefs_window.alarm_aud_adj.get_value(),
                         self.voipgainadj.get_value(),
-                        1.0 / self.jingles.interlude.pbspeedfactor
+                        1.0 / self.background.player.pbspeedfactor
                         )
         self.mixer_write("MIXR=%s\nACTN=mixstats\nend\n" % string_to_send)
 
         self.alarm = False
         iteration = 0
         while self.player_left.flush or self.player_right.flush or \
-                            self.jingles.flush or self.jingles.interludeflush:
+                            self.jingles.flush or self.background.flush:
             time.sleep(0.05)
             self.vu_update(False)
-            self.jingles.interludeflush = self.jingles.interludeflush & \
+            self.background.flush = self.background.flush & \
                                         self.interlude_playing.value
             self.jingles.flush = self.jingles.flush & self.jingles_playing.value
             self.player_left.flush = self.player_left.flush & \
@@ -1851,7 +1850,7 @@ class MainWindow(dbus.service.Object):
 
         # get metadata from left (meta == 0) or right (meta == 1) player
         target = (self.player_left, self.player_right,
-                                            self.jingles.interlude, None)[meta]
+                                            self.background.player, None)[meta]
         meta_context = None
         if target is None:
             self.songname = self.artist = self.title = self.album = ""
@@ -1868,7 +1867,7 @@ class MainWindow(dbus.service.Object):
 
             self.songname = target.songname
             self.music_filename = target.music_filename
-            meta_context = [target, target.player_cid, 
+            meta_context = [target, target.player_cid,
                     self.artist, self.title, self.album, self.music_filename]
             # TOREVIEW: I think this could be done better. Again as
             # previous comments, maybe a special list/tuple class?
@@ -1947,7 +1946,7 @@ class MainWindow(dbus.service.Object):
     def track_metadata_changed(self, artist, title, album, songname,
                                                                 music_filename):
         """DBus signal for plugins to attach to for metadata updates."""
-    
+
         print("track_metadata_changed called and signal emitted")
 
     @dbus.service.signal(dbus_interface=PGlobs.dbus_bus_basename,
@@ -2001,7 +2000,7 @@ class MainWindow(dbus.service.Object):
             def fmt(artist, title, album):
                 o, c = ("[", "]") if "(" in album or ")" in album else ("(", ")")
                 return "{} - {} - {}{}{}".format(artist, title, o, album, c)
-            
+
             if not album and not artist:
                 sep = title.count(" - ")
                 if sep == 2:
@@ -2020,14 +2019,10 @@ class MainWindow(dbus.service.Object):
             else:
                 song = fmt(artist, title, album)
 
-            artist = artist.encode("utf-8")
-            title = title.encode("utf-8")
-            album = album.encode("utf-8")
-
         if infotype == 7:
             model = player.model_playing
             iter = player.iter_playing
-            
+
             song = model.get_value(iter, 3)
             artist = model.get_value(iter, 6)
             title = model.get_value(iter, 5)
@@ -2041,7 +2036,6 @@ class MainWindow(dbus.service.Object):
         timeout_add(time_lag, self.new_songname_timeout,
                         (song, artist, title, album, player, player_context))
 
-    @threadslock
     def new_songname_timeout(self, tuple_):
         (song, artist, title, album, player, player_context) = tuple_
         if player.player_cid == (player_context | 1) and player.cuesheet is None:
@@ -2054,7 +2048,7 @@ class MainWindow(dbus.service.Object):
             print("context mismatch, player context id =", player.player_cid,
                   "metadata update carries context id =", player_context)
         return False
-        
+
     def ui_detail_leveller(self, level):
         def inner(widget):
             try:
@@ -2091,6 +2085,9 @@ class MainWindow(dbus.service.Object):
                 self.simplemixer = True
                 self.full_wst.set_tracking(False)
                 self.player_right.stop.clicked()
+                self.background.player.stop.clicked()
+                for effect in self.jingles.all_effects:
+                    effect.stop.clicked()
                 self.crossadj.set_value(0)
                 self.window.forall(self.ui_detail_leveller(0))
                 for each in (self.player_left, self.player_right):
@@ -2109,7 +2106,7 @@ class MainWindow(dbus.service.Object):
             self.crossfade.set_value(data == "cfmright" and 100 \
                                     or data == "cfmmidl" and 48 \
                                     or data == "cfmmidr" and 52 \
-                                    or data == "cfmleft" and 0) 
+                                    or data == "cfmleft" and 0)
         if data == "pass-crossfader":
             if self.crosspass:
                 self.crossdirection = not self.crossdirection
@@ -2120,7 +2117,7 @@ class MainWindow(dbus.service.Object):
         if data == "Clear History":
             self.history_buffer.set_text("")
 
-    def expandercallback(self, expander, param_spec, user_data=None): 
+    def expandercallback(self, expander, param_spec, user_data=None):
         if expander.get_expanded():
             self.history_vbox.show()
         else:
@@ -2130,7 +2127,6 @@ class MainWindow(dbus.service.Object):
         if self.player_right.is_playing:
             self.player_right.reselect_cursor_please = True
 
-    @threadslock
     def cb_crosspass(self):
         x = self.crossadj.get_value()
         if x == 100 * self.crossdirection:
@@ -2147,9 +2143,9 @@ class MainWindow(dbus.service.Object):
         print("Metadata source was changed. Before: %d" % self.metadata_src)
         self.metadata_src = widget.get_active()
         print("Metadata source was changed. Now: %d" % self.metadata_src)
-        
+
         for each in (self.player_left, self.player_right,
-                                                    self.jingles.interlude):
+                                                    self.background.player):
             each.expire_metadata()
 
         # update mixer status and metadata
@@ -2205,26 +2201,26 @@ class MainWindow(dbus.service.Object):
         else:
             self.voiplevsbox.hide()
             self.spacerbox.hide()
-            
+
         self.send_new_mixer_stats()
 
     def cb_crossfade(self, fader):
         cf = fader.get_value()
-        
+
         if self.metadata_src == self.METADATA_CROSSFADER and (
                             cf < 50 <= self.old_cf or self.old_cf < 50 <= cf):
             self.player_left.expire_metadata()
             self.player_right.expire_metadata()
 
         self.send_new_mixer_stats()
-        
+
         self.old_cf = cf
-    
+
 
     def cb_crosspattern(self, widget):
         print("crossfader pattern changed")
         self.send_new_mixer_stats()
-    
+
 
     def cb_deckvol(self, gain):
         self.send_new_mixer_stats()
@@ -2288,7 +2284,7 @@ class MainWindow(dbus.service.Object):
                 fh.write("playerpage=" +
                     str(self.player_nb.get_current_page()) + "\n")
                 fh.close()
-                
+
                 # Save a list of files played and timestamps.
                 fh = open(session_filename + "_files_played", "wb")
                 cutoff = time.time() - 2592000 # 2592000 = 30 days.
@@ -2298,7 +2294,7 @@ class MainWindow(dbus.service.Object):
                         recent[key] = value
                 pickle.Pickler(fh).dump(recent)
                 fh.close()
-            
+
         except Exception as e:
             print("Error writing out main session data", e)
 
@@ -2320,7 +2316,7 @@ class MainWindow(dbus.service.Object):
             link_uuid_reg.clear()
             for row in itertools.chain(self.player_left.liststore,
                                         self.player_right.liststore,
-                                        self.jingles.interlude.liststore):
+                                        self.background.player.liststore):
                 uuid_ = row[10]
                 try:
                     uuid.UUID(uuid_)
@@ -2339,72 +2335,67 @@ class MainWindow(dbus.service.Object):
         self.player_left.save_session(where)
         self.player_right.save_session(where)
         self.jingles.save_session(where)
+        self.background.player.save_session(where)
         # JACK ports are saved at the moment of change, not here.
-        
+
         return True  # This is also a timeout routine
 
     def restore_session(self):
         try:
-            fh = open(pm.basedir / self.session_filename, "r")
+            with open(pm.basedir / self.session_filename, "r") as fh:
+                while 1:
+                    try:
+                        line = fh.readline()
+                        if line == "":
+                            break
+                    except Exception:
+                            break
+                    k, _, v = line[:-1].partition('=')
+
+                    if k=="deckvol":
+                        self.deckadj.set_value(float(v))
+                    elif k=="deck2vol":
+                        self.deck2adj.set_value(float(v))
+                    elif k=="crossfade":
+                        self.crossadj.set_value(float(v))
+                    elif k=="stream_mon":
+                        self.listen_stream.set_active(int(v))
+                    elif k=="tracks_played":
+                        if int(line[14:-1]):
+                            self.history_expander.emit("activate")
+                    elif k=="pass_speed":
+                        self.passspeed_adj.set_value(float(v))
+                    elif k=="prefs":
+                        if v=="1":
+                            self.prefs_window.window.show()
+                    elif k=="server":
+                        if v=="1":
+                            self.server_window.window.show()
+                    elif k=="prefspage":
+                        self.prefs_window.notebook.set_current_page(int(v))
+                    elif k=="metadata_src":
+                        self.metadata_source.set_active(int(v))
+                    elif k=="crosstype":
+                        self.crosspattern.set_active(int(v))
+                    elif k=="hpane":
+                        self.paned.set_position(int(v))
+                    elif k=="vpane":
+                        self.leftpane.set_position(int(v))
+                    elif k in ("cw_tree", "cw_flat", "cw_catalogs"):
+                        self.topleftpane.set_col_widths(k[3:], v)
+                    elif k=="dbpage":
+                        self.topleftpane.notebook.set_current_page(int(v))
+                    elif k=="playerpage":
+                        self.player_nb.set_current_page(int(v))
         except Exception as e:
             print(e)
             return
-            
-        while 1:
-            try:
-                line = fh.readline()
-                if line == "":
-                    break
-            except:
-                    break
-            k, _, v = line[:-1].partition('=')
 
-            if k=="deckvol":
-                self.deckadj.set_value(float(v))
-            elif k=="deck2vol":
-                self.deck2adj.set_value(float(v))
-            elif k=="crossfade":
-                self.crossadj.set_value(float(v))
-            elif k=="stream_mon":
-                self.listen_stream.set_active(int(v))
-            elif k=="tracks_played":
-                if int(line[14:-1]):
-                    self.history_expander.emit("activate")
-            elif k=="pass_speed":
-                self.passspeed_adj.set_value(float(v))
-            elif k=="prefs":
-                if v=="1": 
-                    self.prefs_window.window.show()
-            elif k=="server":
-                if v=="1":
-                    self.server_window.window.show()
-            elif k=="jingles":
-                if v=="1":
-                    self.jingles.show()
-            elif k=="prefspage":
-                self.prefs_window.notebook.set_current_page(int(v))
-            elif k=="metadata_src":
-                self.metadata_source.set_active(int(v))
-            elif k=="crosstype":
-                self.crosspattern.set_active(int(v))
-            elif k=="hpane":
-                self.paned.set_position(int(v))
-            elif k=="vpane":
-                self.leftpane.set_position(int(v))
-            elif k in ("cw_tree", "cw_flat", "cw_catalogs"):
-                self.topleftpane.set_col_widths(k[3:], v)
-            elif k=="dbpage":
-                self.topleftpane.notebook.set_current_page(int(v))
-            elif k=="playerpage":
-                self.player_nb.set_current_page(int(v))
-                
         try:
-            fh = open(self.session_filename + "_files_played", "r")
-        except:
+            with open(self.session_filename + "_files_played", "r") as fh:
+                self.files_played = pickle.Unpickler(fh).load()
+        except Exception:
             pass
-        else:
-            self.files_played = pickle.Unpickler(fh).load()
-            fh.close()
 
         mst = pm.basedir / (self.session_filename + "_tracks")
         try:
@@ -2414,12 +2405,11 @@ class MainWindow(dbus.service.Object):
             return
         if stat.st_ctime + 21600 > time.time():
             try:
-                fh = open(mst, "r")
+                with open(mst, "r") as fh:
+                    text = fh.read()
             except Exception as e:
                 print(e)
                 return
-            text = fh.read()
-            fh.close()
             self.history_buffer.set_text(text)
         else:
             print("disregarding out of date track history text")
@@ -2470,7 +2460,7 @@ class MainWindow(dbus.service.Object):
         while Gdk.events_pending():
             Gtk.main_iteration()
 
-        time.sleep(0.3) # Allow time for all subthreads/programs time to exit 
+        time.sleep(0.3) # Allow time for all subthreads/programs time to exit
         exit(0)
 
     @dbus.service.signal(dbus_interface=PGlobs.dbus_bus_basename, signature="")
@@ -2488,7 +2478,7 @@ class MainWindow(dbus.service.Object):
     @dbus.service.signal(dbus_interface=PGlobs.dbus_bus_basename, signature="")
     def tracks_finishing(self):
         """Called to notify DJ that music tracks are ending."""
-        
+
         pass
 
     @dbus.service.method(dbus_interface=PGlobs.dbus_bus_basename, out_signature="u")
@@ -2500,7 +2490,7 @@ class MainWindow(dbus.service.Object):
     def delete_event(self, widget, event, data=None):
         qm = ["<span size='12000' weight='bold'>%s</span>" %
                             _("Confirmation to quit IDJC is required."), ""]
-        
+
         if self.server_window.is_streaming and self.server_window.is_recording:
             qm.append(
                 _("All active recordings and radio streams will terminate."))
@@ -2511,7 +2501,7 @@ class MainWindow(dbus.service.Object):
         else:
             self.destroy()
             return False
-        
+
         idjc_shutdown_dialog(self.window_group, self.destroy, None, qm)
         return True
 
@@ -2536,16 +2526,16 @@ class MainWindow(dbus.service.Object):
                 if not self.backend.init_backend(ctypes.byref(read), ctypes.byref(write)):
                     print("call to init_backend failed")
                     continue
-                
+
                 try:
                     self._mixer_ctrl = os.fdopen(write.value, "w")
                     self._mixer_rply = os.fdopen(read.value, "r")
                 except OSError:
                     "failed to open streams to backend"
                     continue
-                    
+
                 print("awaiting reply")
-                    
+
                 for j in range(10):
                     reply = self.mixer_read()
                     print("got", reply)
@@ -2558,7 +2548,7 @@ class MainWindow(dbus.service.Object):
                 if FGlobs.have_libmpg123:
                     self.mixer_write("ACTN=mp3_getstatus\nend\n")
                     self.mp3status = int(self.mixer_read())
-              
+
                 if message != "bootstrap":
                     # Restore previous settings.
                     self.send_new_mixer_stats()
@@ -2566,7 +2556,7 @@ class MainWindow(dbus.service.Object):
                     self.prefs_window.voip_pan_backend_update()
                     self.player_left.next.clicked()
                     self.player_right.next.clicked()
-                    self.jingles.interlude.next.clicked()                  
+                    self.background.player.next.clicked()
                     self.server_window.source_client_open()
                     self.comms_reply_pending = False
                     self.server_window.restart_streams_and_recorders()
@@ -2597,97 +2587,103 @@ class MainWindow(dbus.service.Object):
         player_metadata = []
         session_cmd = midis = ''
         cons_changed = False
-        
-        with (gdklock if locking else nullcm)():
-            if not Gtk.main_level():
-                return False
 
-            vu_update_counter[0] += 1
-            if vu_update_counter[0] % 20 == 0:
-                self.heartbeat()
-           
-            try:
-                self.mixer_write("ACTN=requestlevels\nend\n")
-            except (ValueError, IOError):
+        if not Gtk.main_level():
+            return False
+
+        vu_update_counter[0] += 1
+        if vu_update_counter[0] % 20 == 0:
+            self.heartbeat()
+
+        try:
+            self.mixer_write("ACTN=requestlevels\nend\n")
+        except (ValueError, IOError):
+            return True
+
+
+        while 1:
+            line = self.mixer_read().rstrip()
+            if line == "":
                 return True
 
-            
-            while 1:
-                line = self.mixer_read().rstrip()
-                if line == "":
-                    return True
+            if line == "end":
+                break
 
-                if line == "end":
-                    break
+            if not line.count("="):
+                print(line)
+                continue
 
-                if not line.count("="):
-                    print(line)
-                    continue
+            key, value = line.split("=", 1)
 
-                key, value = line.split("=", 1)
+            if key == "midi":
+                midis= value
+                continue
 
-                if key == "midi":
-                    midis= value
-                    continue
-                    
-                if key.startswith("session_"):
-                    session_ns[key[8:]] = value
-                    continue
-                 
-                if key == "ports_connections_changed":
-                    cons_changed = value != "0"
-                    
-                if key.endswith("_silence"):
-                    try:
-                        value = float(value)
-                    except ValueError:
-                        pass
-                else:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        pass
+            if key.startswith("session_"):
+                session_ns[key[8:]] = value
+                continue
 
-                if key.endswith("_new_metadata"):
-                    if not key.startswith("jingles"):
-                        if key.startswith("interlude"):
-                            target = self.jingles.interlude
-                        else:
-                            target = getattr(self, "player_" +
-                                                        key.split("_", 1)[0])
-                        player_metadata.append((target, value))
-                    continue
+            if key == "ports_connections_changed":
+                cons_changed = value != "0"
 
+            if key.endswith("_silence"):
                 try:
-                    self.vumap[key].set_value(value)
-                except KeyError:
+                    value = float(value)
+                except ValueError:
                     pass
-                    #print("key value", key, "missing from vumap")
+            else:
+                try:
+                    value = int(value)
+                except ValueError:
+                    pass
 
-            if self.jingles.playing == True and int(self.jingles_playing) == 0:
-                self.jingles.clear_indicators()
-            
-            for player, data in player_metadata:
-                self.update_songname(player, data)
+            if key.endswith("_new_metadata"):
+                if not key.startswith("jingles"):
+                    if key.startswith("interlude"):
+                        target = self.background.player
+                    else:
+                        target = getattr(self, "player_" +
+                                                    key.split("_", 1)[0])
+                    player_metadata.append((target, value))
+                continue
 
-            if midis:
-                for midi in midis.split(','):
-                    input, _, value = midi.partition(':')
-                    self.controls.input(input, int(value, 16))
+            try:
+                self.vumap[key].set_value(value)
+            except KeyError:
+                pass
+                # print("key value", key, "missing from vumap")
 
-            if session_ns["command"] == "save_L1" and pm.session_type == "L1":
-                self.jack.session_save()
-                self.save_session("L1")
-            if session_ns["command"].endswith("_JACK") and \
-                                                    pm.session_type == "JACK":
-                self.handle_jack_session(**session_ns)
+        if self.jingles.playing == True and int(self.jingles_playing) == 0:
+            self.jingles.clear_indicators()
 
-            if cons_changed:
-                self.jack.standard_save()
+        for player, data in player_metadata:
+            self.update_songname(player, data)
 
-            ep = int(self.effects_playing)
-            if ep != -1:
-                self.jingles.update_effect_leds(ep)
+        if midis:
+            for midi in midis.split(','):
+                input, _, value = midi.partition(':')
+                self.controls.input(input, int(value, 16))
+
+        if session_ns["command"] == "save_L1" and pm.session_type == "L1":
+            self.jack.session_save()
+            self.save_session("L1")
+        if session_ns["command"].endswith("_JACK") and \
+                                                pm.session_type == "JACK":
+            self.handle_jack_session(**session_ns)
+
+        if cons_changed:
+            self.jack.standard_save()
+
+        ep = int(self.effects_playing)
+        if ep != -1:
+            self.jingles.update_effect_highlights(ep)
+
+        ttf = self.player_left.time_to_finish + self.player_right.time_to_finish
+        if ttf:
+            ft = time.localtime(int(time.time()) + ttf)
+            self.main_label_extra.set_text(f"Finish @ {ft.tm_hour:02}:{ft.tm_min:02}")
+        else:
+            self.main_label_extra.set_text(f"Finish @ N/A")
 
         return True
 
@@ -2708,23 +2704,23 @@ class MainWindow(dbus.service.Object):
             self.save_session("JACK", subdir)
         if command == "savetemplate":
             self.save_session("template", subdir)
-            
+
         commandline = " ".join((sys.argv[0], "run"
                         "--session=JACK:%s:${SESSION_DIR}" % pm.session_name,
                         "--jackserver=%s" % uuid))
-                        
+
         if args.channels is not None:
             commandline += " -c " + " ".join(args.channels)
-            
+
         if args.voip is not None:
             commandline += " -V " + args.voip[0]
-            
+
         if args.servers is not None:
             commandline += " -s " + " ".join(args.servers)
-            
+
         if args.crossfader is not None:
             commandline += " -x " + args.crossfader[0]
-            
+
         if args.players is not None:
             commandline += " -P " + " ".join(args.players)
 
@@ -2740,13 +2736,12 @@ class MainWindow(dbus.service.Object):
         if command == "saveandquit":
             self.destroy()
 
-    @threadslock 
     def stats_update(self):
-        players = self.player_left, self.player_right, self.jingles.interlude
+        players = self.player_left, self.player_right, self.background.player
         for player in players:
             if player.player_is_playing:
                 player.check_mixer_signal()
-            elif player.pl_mode.get_active() == 0:
+            elif player.pl_mode.get_active() in (0, 3, 4):
                 player.update_time_stats()
 
         ch = self.mic_opener.mic_list
@@ -2764,7 +2759,7 @@ class MainWindow(dbus.service.Object):
         menusep = Gtk.SeparatorMenuItem()
         menu.append(menusep)
         menusep.show()
-        menuitem = Gtk.MenuItem(_('Remove Contents'))
+        menuitem = Gtk.MenuItem(label=_('Remove Contents'))
         menuitem.connect_object("activate", Gtk.Button.clicked,
                                                             self.history_clear)
         menu.append(menuitem)
@@ -2776,7 +2771,7 @@ class MainWindow(dbus.service.Object):
                 return
         except AttributeError:
             pass
-            
+
         self.controls.input_key(event)
 
     def configure_event(self, widget, event):
@@ -2787,10 +2782,10 @@ class MainWindow(dbus.service.Object):
 
     def cb_panehide(self, widget):
         """ hide widget when all it's children are hidden or non existent """
-        
+
         def test(child):
             return not (child is not None and child.get_visible())
-            
+
         if test(widget.get_child1()) and test(widget.get_child2()):
             widget.hide()
 
@@ -2806,8 +2801,8 @@ class MainWindow(dbus.service.Object):
             print(errormessage)
 
     def flash_test(self):
-        """True if the mic button needs to be flashing now or soon.""" 
-        
+        """True if the mic button needs to be flashing now or soon."""
+
         return self.player_left.is_playing or self.player_right.is_playing
 
     def __init__(self):
@@ -2816,13 +2811,13 @@ class MainWindow(dbus.service.Object):
         self.copyright = PGlobs.copyright
         self.license = PGlobs.license
         self.profile = pm.profile
-        
-        signal.signal(signal.SIGINT, lambda s, f: self.destroy_hard()) #signal.SIG_IGN) #self.destroy_hard)
+
+        signal.signal(signal.SIGINT, lambda s, f: self.destroy_hard())
         signal.signal(signal.SIGUSR1, signal.SIG_IGN)
         signal.signal(signal.SIGUSR2, signal.SIG_IGN)
-                
+
         socket.setdefaulttimeout(15)
-        
+
         config = configparser.RawConfigParser()
         config.read(pm.basedir / 'config')
         try:
@@ -2842,19 +2837,7 @@ class MainWindow(dbus.service.Object):
                                         'resource_count', 'num_recorders')
         except configparser.Error:
             pass
-        try:
-            PGlobs.num_effects = config.getint(
-                                        'resource_count', 'num_effects')
-        except configparser.Error:
-            pass
-        try:
-            PGlobs.theme = config.get('misc', 'theme')
-            if PGlobs.theme == "darktheme":
-                PGlobs.themedir = FGlobs.darkthemedir
-                print("using dark theme icon set")
-        except configparser.Error:
-            pass
-       
+
         if pm.session_uuid is None:
             if args.jackserver is None:
                 os.environ["jack_parameter"] = "default"
@@ -2899,10 +2882,17 @@ class MainWindow(dbus.service.Object):
             raise self.initfailed
 
         self.mixer_write("bootstrap")
-  
+
         # create the GUI elements
         self.window_group = Gtk.WindowGroup()
-        self.window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
+        self.window = Gtk.Window.new(Gtk.WindowType.TOPLEVEL)
+        style_context = self.window.get_style_context()
+        rgba = style_context.get_background_color(Gtk.StateFlags.NORMAL)
+        if rgba.red < 0.35 and rgba.green < 0.35 and rgba.blue < 0.35:
+            PGlobs.theme = "darktheme"
+            PGlobs.themedir = FGlobs.darkthemedir
+            print("icons for a dark theme selected")
+
         self.window.set_gravity(Gdk.Gravity.STATIC)
         self.window_group.add_window(self.window)
         self.window.set_title(self.appname + pm.title_extra)
@@ -2910,6 +2900,7 @@ class MainWindow(dbus.service.Object):
         self.hbox10 = Gtk.HBox(False)
         self.hbox10.set_spacing(6)
         self.paned = Gtk.HPaned()
+        self.paned.set_wide_handle(True)
         self.leftpane = Gtk.VPaned()
         self.paned.pack1(self.leftpane)
         self.topleftpane = songdb.MediaPane()
@@ -2922,13 +2913,13 @@ class MainWindow(dbus.service.Object):
 
         # Expand features by adding something useful here
         # a dummy widget is needed to prevent a segfault when F8 is pressed
-        self.bottomleftpane = Gtk.Button("Bottom")
+        self.bottomleftpane = Gtk.Button.new_with_label("Bottom")
         self.leftpane.pack2(self.bottomleftpane)
-        
+
         self.rightpane = Gtk.HBox(False, 0)
         self.paned.pack2(self.rightpane, True, False)
         self.vbox8 = Gtk.VBox(False, 0)
-        
+
         menuhbox = Gtk.HBox()
         self.vbox8.pack_start(menuhbox, False)
         menuhbox.show()
@@ -2939,30 +2930,40 @@ class MainWindow(dbus.service.Object):
         self.window.add(self.paned)
         self.rightpane.show()
         self.paned.show()
-        
+
         self.player_nb = Gtk.Notebook()
         main_label = Gtk.Label()
+        sep = Gtk.Separator.new(Gtk.Orientation.VERTICAL)
+        self.main_label_extra = Gtk.Label()
         self.label_subst.add_widget(main_label, "mainplayerslabel", _('Main Players'))
         self.vbox6 = Gtk.VBox(False, 0)
-        self.player_nb.append_page(self.vbox6, main_label)
+
+        main_label_hbox = Gtk.HBox()
+        main_label_hbox.pack_start(main_label, False)
+        main_label_hbox.pack_start(sep, False, False, 5)
+        main_label_hbox.pack_start(self.main_label_extra, False)
+        self.main_label_extra.connect_after("notify::visible", lambda w, s: sep.set_visible(w.props.visible))
+        main_label_hbox.show()
+
+        self.player_nb.append_page(self.vbox6, main_label_hbox)
         main_label.show()
         self.vbox8.pack_start(self.player_nb, True, True, 0)
         self.player_nb.show()
         self.hbox7 = Gtk.HBox(True)
         self.hbox10.show()
-  
+
         self.hbox10spc = Gtk.HBox()
         self.vbox8.pack_start(self.hbox10spc, False, padding=3)
         self.hbox10spc.show()
-  
+
         self.vbox8.pack_start(self.hbox10, False, False, 0)
-        
+
         spc = Gtk.HBox()
         self.vbox8.pack_start(spc, False, padding=2)
         spc.show()
-        
+
         # show box 8 now that it's finished
-        self.vbox8.show()               
+        self.vbox8.show()
 
         self.freewheel_button = FreewheelButton(self.mixer_write)
         self.hbox10.pack_start(self.freewheel_button, False)
@@ -2970,22 +2971,21 @@ class MainWindow(dbus.service.Object):
         self.dsp_button = Gtk.ToggleButton()
         self.dsp_button.viewlevels = (5,)
         label = Gtk.Label()
-        label.set_markup("<span weight='bold' size='9000' "
-                                    "foreground='#333'>%s</span>" % _('DSP'))
+        label.set_markup("<span weight='normal' size='9000'>DSP</span>")
         self.dsp_button.add(label)
         label.show()
         self.dsp_button.connect("toggled",
                                         lambda w: self.send_new_mixer_stats())
         self.hbox10.pack_start(self.dsp_button, False)
         self.dsp_button.show()
-                
+
         phonebox = Gtk.HBox()
-        phonebox.viewlevels = (5,)       
+        phonebox.viewlevels = (5,)
         phonebox.set_spacing(2)
-        
+
         pixbuf4 = GdkPixbuf.Pixbuf.new_from_file(
                                         FGlobs.pkgdatadir / "greenphone.png")
-                                        
+
         pixbuf4 = pixbuf4.scale_simple(25, 20, GdkPixbuf.InterpType.BILINEAR)
         image = Gtk.Image()
         image.set_from_pixbuf(pixbuf4)
@@ -3010,36 +3010,40 @@ class MainWindow(dbus.service.Object):
         phonebox.pack_start(self.redphone)
         self.redphone.show()
         set_tip(self.redphone, _('Mix voice over IP audio to the DJ only.'))
- 
+
         self.hbox10.pack_start(phonebox, False)
         phonebox.show()
-         
+
         self.pan_preset_chooser = PanPresetChooser()
         self.pan_preset_chooser.viewlevels = (5,)
         self.hbox10.pack_start(self.pan_preset_chooser, False)
         self.pan_preset_chooser.show_all()
-        
+
         # microphone open/unmute dynamic widget cluster thingy
         self.mic_opener = MicOpener(self, self.flash_test)
         self.mic_opener.viewlevels = (5,)
         self.hbox10.pack_start(self.mic_opener)
         self.mic_opener.show()
-        
+
         # playlist advance button
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file(PGlobs.themedir / "advance.png")
-        pixbuf = pixbuf.scale_simple(32, 14, GdkPixbuf.InterpType.BILINEAR)
-        image = Gtk.Image()
-        image.set_from_pixbuf(pixbuf)
         self.advance = Gtk.Button()
-        self.advance.add(image)
-        image.show()
+        imagebox = Gtk.Box()
+        self.advance.add(imagebox)
         self.advance.connect("clicked", self.callback, "Advance")
         self.hbox10.pack_end(self.advance, False)
-        self.advance.show()
+        self.advance.show_all()
         set_tip(self.advance, _('This button steps through the active playlist,'
                             ' pausing between tracks. The active playlist is'
                             ' defined by the placement of the crossfader.'))
-        
+
+        for icon_name in ("media-skip-forward-symbolic",
+                          "audio-input-microphone-symbolic",
+                          "media-playback-start-symbolic"):
+            image = Gtk.Image.new_from_icon_name(icon_name,
+                                                 Gtk.IconSize.BUTTON)
+            imagebox.add(image)
+            image.show()
+
         self.hbox7.show()
         self.hbox10.show()
 
@@ -3054,7 +3058,7 @@ class MainWindow(dbus.service.Object):
         vbox2.pack_start(self.hbox4, True, True, 0)
         self.vbox6.pack_start(self.grid1, True, True, 0)
         self.grid1.show()
-        
+
         # Boxes 3L and 3R contain our media players
         self.vbox3L = Gtk.VBox(False, 0)
         self.vbox3L.set_border_width(2)
@@ -3070,20 +3074,23 @@ class MainWindow(dbus.service.Object):
         self.volframe.add(self.vboxvol)
         self.volframe.show()
         self.hbox4.pack_start(self.volframe, False, True, 3)
-              
+
         # A pictoral volume label above horizontally-stacked volume control(s)
-        image = Gtk.Image()
-        image.set_from_file(PGlobs.themedir / "volume2.png")
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(PGlobs.themedir / "volume16.svg",
+                                                         16, 16, True)
+        image = Gtk.Image.new_from_pixbuf(pixbuf)
+        image.set_margin_top(2)
+        image.set_margin_bottom(4)
         self.vboxvol.pack_start(image, False, False, 0)
         image.show()
         hboxvol = Gtk.HBox(True, 0)
         self.vboxvol.pack_start(hboxvol, True, True, 0)
         hboxvol.show()
-        
+
         # Primary volume control
-        self.deckadj = Gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 6.0)
+        self.deckadj = Gtk.Adjustment(value=127.0, lower=0.0, upper=127.0, step_increment=1.0, page_increment=6.0)
         self.deckadj.connect("value_changed", self.cb_deckvol)
-        self.deckvol = Gtk.VScale.new(self.deckadj)
+        self.deckvol = Gtk.Scale.new(adjustment=self.deckadj, orientation=Gtk.Orientation.VERTICAL)
         self.deckvol.set_draw_value(False)
         self.deckvol.set_inverted(True)
         hboxvol.pack_start(self.deckvol, False, False, 4)
@@ -3092,9 +3099,9 @@ class MainWindow(dbus.service.Object):
                         _('The volume control shared by both music players.'))
 
         # Visible when using separate player volume controls.
-        self.deck2adj = Gtk.Adjustment(127.0, 0.0, 127.0, 1.0, 6.0)
+        self.deck2adj = Gtk.Adjustment(value=127.0, lower=0.0, upper=127.0, step_increment=1.0, page_increment=6.0)
         self.deck2adj.connect("value_changed", self.cb_deckvol)
-        self.deck2vol = Gtk.VScale.new(self.deck2adj)
+        self.deck2vol = Gtk.Scale(adjustment=self.deck2adj, orientation=Gtk.Orientation.VERTICAL)
         self.deck2vol.set_draw_value(False)
         self.deck2vol.set_inverted(True)
         hboxvol.pack_start(self.deck2vol, False)
@@ -3118,10 +3125,10 @@ class MainWindow(dbus.service.Object):
         greenphoneimage.set_from_pixbuf(pixbuf)
         self.voipgainvbox.pack_start(greenphoneimage, False)
         greenphoneimage.show()
-        
-        self.voipgainadj = Gtk.Adjustment(64.0, 0.0, 127.0, 1.0, 6.0)
+
+        self.voipgainadj = Gtk.Adjustment(value=64.0, lower=0.0, upper=127.0, step_increment=1.0, page_increment=6.0)
         self.voipgainadj.connect("value_changed", self.cb_deckvol)
-        voipgain = Gtk.VScale.new(self.voipgainadj)
+        voipgain = Gtk.Scale(adjustment=self.voipgainadj, orientation=Gtk.Orientation.VERTICAL)
         voipgain.set_draw_value(False)
         voipgain.set_inverted(True)
         self.voipgainvbox.pack_start(voipgain)
@@ -3132,44 +3139,44 @@ class MainWindow(dbus.service.Object):
         self.mixbackvbox.set_spacing(1)
         self.voiplevsbox.pack_start(self.mixbackvbox, False)
         self.mixbackvbox.show()
-         
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file(FGlobs.pkgdatadir / "pbphone.png")
+
+        pixbuf = GdkPixbuf.Pixbuf.new_from_file(FGlobs.pkgdatadir / "redphone.png")
         pixbuf = pixbuf.scale_simple(20, 17, GdkPixbuf.InterpType.HYPER)
         pbphoneimage = Gtk.Image()
         pbphoneimage.set_from_pixbuf(pixbuf)
         self.mixbackvbox.pack_start(pbphoneimage, False)
         pbphoneimage.show()
-        
-        self.mixbackadj = Gtk.Adjustment(64.0, 0.0, 127.0, 1.0, 6.0)
+
+        self.mixbackadj = Gtk.Adjustment(value=64.0, lower=0.0, upper=127.0, step_increment=1.0, page_increment=6.0)
         self.mixbackadj.connect("value_changed", self.cb_deckvol)
-        mixback = Gtk.VScale.new(self.mixbackadj)
+        mixback = Gtk.Scale(adjustment=self.mixbackadj, orientation=Gtk.Orientation.VERTICAL)
         mixback.set_draw_value(False)
         mixback.set_inverted(True)
         self.mixbackvbox.pack_start(mixback)
         mixback.show()
         set_tip(self.mixbackvbox,
         _('The stream volume level to send to the voice over IP connection.'))
-        
+
         self.vboxvol.show()
-        
+
         # A box for the second deck.
         self.vbox3R = Gtk.VBox(False, 0)
         self.vbox3R.viewlevels = (5,)
         self.vbox3R.set_border_width(2)
         self.hbox4.pack_start(self.vbox3R, True, True, 0)
-        
+
         # hbox4 is full now so let's show it.
         self.hbox4.show()
-        
+
         # The contents of the two player panes 3L and 3R are next up
         # The two identical players have been moved into one class
-        
+
         self.player_left = IDJC_Media_Player(self.vbox3L, "left", self)
         self.vbox3L.show()
-        
+
         self.player_right = IDJC_Media_Player(self.vbox3R, "right", self)
         self.vbox3R.show()
-        
+
         # A track history window to help with announcements
 
         history_expander_hbox = Gtk.HBox()
@@ -3180,7 +3187,7 @@ class MainWindow(dbus.service.Object):
         self.history_expander.show()
         vbox2.pack_start(history_expander_hbox, False, False, 0)
         history_expander_hbox.show()
-        
+
         self.history_vbox = Gtk.VBox()
         history_hbox = Gtk.HBox()
         self.history_vbox.pack_start(history_hbox, True, True, 0)
@@ -3197,19 +3204,19 @@ class MainWindow(dbus.service.Object):
         self.history_window.set_size_request(-1, 10)
         self.history_window.set_shadow_type(Gtk.ShadowType.IN)
         self.history_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
-        
+
         history_clear_box = Gtk.HBox()
         # TC: Popup menu item, wipes away the tracks played history text.
-        self.history_clear = Gtk.Button(" " + _('Remove Contents') + " ")
-        self.history_clear.connect("clicked", self.callback, "Clear History") 
+        self.history_clear = Gtk.Button.new_with_label(" " + _('Remove Contents') + " ")
+        self.history_clear.connect("clicked", self.callback, "Clear History")
         history_clear_box.pack_start(self.history_clear, True, False, 0)
         self.history_clear.show()
         self.history_vbox.pack_start(history_clear_box, False, False, 1)
-        
+
         spacer = Gtk.VBox()
         self.history_vbox.pack_start(spacer, False, False, 1)
         spacer.show()
-        
+
         self.history_textview = Gtk.TextView()
         self.history_textview.connect("populate-popup", self.cb_history_populate)
         self.history_window.add(self.history_textview)
@@ -3218,13 +3225,13 @@ class MainWindow(dbus.service.Object):
         self.history_textview.set_editable(False)
         self.history_textview.set_wrap_mode(Gtk.WrapMode.CHAR)
         self.history_buffer = self.history_textview.get_buffer()
-        
+
         self.abox = Gtk.HBox()
         self.abox.viewlevels = (5,)
         self.abox.set_border_width(2)
         self.vbox6.pack_start(self.abox, False, False, 0)
         self.abox.show()
-        
+
         # The crossfader.  No DJ should be without one. ;)
         self.outercrossbox = Gtk.HBox()
 
@@ -3233,34 +3240,43 @@ class MainWindow(dbus.service.Object):
         self.outercrossbox.pack_start(crossframe, True, True, 6)
         self.outercrossbox.show()
         crossframe.set_border_width(0)
+        crossframe.set_vexpand(False)
         self.crossbox = Gtk.HBox()
         crossframe.add(self.crossbox)
         crossframe.show()
         self.crossbox.set_border_width(2)
         self.crossbox.set_spacing(3)
-        
-        cross_sizegroup = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
-        cross_sizegroup2 = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
-        sg3 = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
-                
+
+        cross_sizegroup = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
+        cross_sizegroup2 = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
+        sg3 = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
+
         smvbox = Gtk.VBox()
         label = Gtk.Label()
         label.set_markup("<span size='8000'>%s</span>" % _('Monitor Mix'))
         smvbox.add(label)
         label.show()
-        
-        smhbox = Gtk.HBox()
-        smhbox.set_border_width(1)
+
+        smhbox = Gtk.HBox(homogeneous=True)
+        smhbox.set_vexpand(True)
+        #smhbox.set_border_width(1)
+        #smhbox.set_margin_start(1)
+        smhbox.set_margin_end(1)
         self.listen_dj = Gtk.RadioButton.new_with_label(None, _('DJ'))
-        smhbox.add(self.listen_dj)
+        self.listen_dj.set_mode(False)
+        smhbox.pack_start(self.listen_dj, True, True)
         self.listen_dj.show()
         self.listen_stream = Gtk.RadioButton.new_with_label_from_widget(self.listen_dj, _('Stream'))
-        smhbox.add(self.listen_stream)
+        self.listen_stream.set_mode(False)
+        smhbox.pack_start(self.listen_stream, True, True)
         self.listen_stream.show()
         smhbox.show()
         smvbox.add(smhbox)
         sg3.add_widget(smhbox)
-        
+        #sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
+        #sg.add_widget(self.listen_dj)
+        #sg.add_widget(self.listen_stream)
+
         self.listen_stream.connect("toggled", self.cb_toggle, "stream-mon")
         # TC: Context {0}, {1}, {2} = Monitor Mix, Stream, DJ
         # TC: Or whatever they become translated to.
@@ -3269,7 +3285,7 @@ class MainWindow(dbus.service.Object):
         " the listeners are hearing including the effects of the crossfader. "
         "'{0}' needs to be set to '{2}' in order to make proper use of the "
         "VoIP features.").format(_("Monitor Mix"), _("Stream"), _("DJ")))
-        
+
         cross_sizegroup.add_widget(smhbox)
         self.crossbox.pack_start(smvbox, False, False, 0)
         smvbox.show()
@@ -3305,7 +3321,7 @@ class MainWindow(dbus.service.Object):
         mvbox.show()
         cross_sizegroup2.add_widget(self.metadata_source)
         sg3.add_widget(self.metadata_source)
-        
+
         plvbox = Gtk.VBox()
         label = Gtk.Label()
         # TC: Abbreviation of left.
@@ -3320,15 +3336,17 @@ class MainWindow(dbus.service.Object):
         plvbox.show()
         set_tip(plvbox, _('Move the crossfader fully left.'))
         sg3.add_widget(self.passleft)
-        
-        self.crossadj = Gtk.Adjustment(0.0, 0.0, 100.0, 1.0, 3.0, 0.0)
-        self.crossadj.connect("value_changed", self.cb_crossfade)       
+
+        self.crossadj = Gtk.Adjustment(value=0.0, lower=0.0, upper=100.0, step_increment=1.0, page_increment=3.0, page_size=0.0)
+        self.crossadj.connect("value_changed", self.cb_crossfade)
         cvbox = Gtk.VBox()
         label = Gtk.Label()
         label.set_markup("<span size='8000'>%s</span>" % _('Crossfader'))
         cvbox.add(label)
         label.show()
-        self.crossfade = Gtk.HScale.new(self.crossadj)
+        self.crossfade = Gtk.Scale(adjustment=self.crossadj)
+        #self.crossfade.set_valign(Gtk.Align.END)
+        self.crossfade.set_vexpand(True)
         self.crossfade.set_draw_value(False)
         cvbox.add(self.crossfade)
         self.crossfade.show()
@@ -3354,8 +3372,8 @@ class MainWindow(dbus.service.Object):
 
         patternbox = Gtk.HBox()
         patternbox.set_spacing(2)
-        sg4 = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
-        
+        sg4 = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
+
         passbox = Gtk.VBox()
         # TC: Describes a mid point.
         label = Gtk.Label()
@@ -3368,23 +3386,25 @@ class MainWindow(dbus.service.Object):
         passhbox.show()
         patternbox.pack_start(passbox, False, False, 0)
         passbox.show()
-        
+
         self.passmidleft = make_arrow_button(
                                 self, Gtk.ArrowType.UP, Gtk.ShadowType.NONE, "cfmmidl")
+        self.passmidleft.set_vexpand(True)
         sg4.add_widget(self.passmidleft)
         passhbox.pack_start(self.passmidleft, False, False, 0)
         self.passmidleft.show()
         set_tip(self.passmidleft,
         _('Move the crossfader to the middle of its range of travel.'))
-        
+
         self.passmidright = make_arrow_button(
                                 self, Gtk.ArrowType.UP, Gtk.ShadowType.NONE, "cfmmidr")
+        self.passmidright.set_vexpand(True)
         passhbox.pack_start(self.passmidright, False, False, 0)
         self.passmidright.show()
         set_tip(self.passmidright,
                 _('Move the crossfader to the middle of its range of travel.'))
         sg4.add_widget(self.passmidright)
-        
+
         pvbox = Gtk.VBox()
         # TC: The attenuation response curve of the crossfader. User selectable.
         label = Gtk.Label()
@@ -3414,21 +3434,22 @@ class MainWindow(dbus.service.Object):
         'respectively.'))
         patternbox.pack_start(pvbox, True, True, 0)
         pvbox.show()
-        
-        
+
+
         sg4.add_widget(self.crosspattern)
-        
+
         passbox = Gtk.HBox()
         passbox.set_spacing(2)
-        
+
         tvbox = Gtk.VBox()
         # TC: Duration in seconds.
         label = Gtk.Label()
         label.set_markup("<span size='8000'>%s</span>" % _('Time'))
         tvbox.add(label)
         label.show()
-        self.passspeed_adj = Gtk.Adjustment(1.0, 0.25, 20.0, 0.25, 0.25)
+        self.passspeed_adj = Gtk.Adjustment(value=1.0, lower=0.25, upper=20.0, step_increment=0.25, page_increment=0.25)
         self.passspeed = Gtk.SpinButton.new(self.passspeed_adj, 0, 2)
+        self.passspeed.set_vexpand(True)
         tvbox.pack_start(self.passspeed, False, False, 0)
         self.passspeed.show()
         set_tip(tvbox, _('The time in seconds that the crossfader will take to'
@@ -3436,7 +3457,7 @@ class MainWindow(dbus.service.Object):
         passbox.pack_start(tvbox, False, False, 0)
         tvbox.show()
         sg4.add_widget(self.passspeed)
-        
+
         pvbox = Gtk.VBox()
         # TC: The crossfader pass-across button text.
         # TC: The actual button appears as [<-->] with this text above it.
@@ -3444,10 +3465,13 @@ class MainWindow(dbus.service.Object):
         label.set_markup("<span size='8000'>%s</span>" % _('Pass'))
         pvbox.add(label)
         label.show()
-        image = Gtk.Image()
-        image.set_from_file(PGlobs.themedir / "pass.png")
+        pass_pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(PGlobs.themedir / "pass16.svg",
+                                                         24, 12, False)
+        image = Gtk.Image.new_from_pixbuf(pass_pb)
+        #image.set_from_file(PGlobs.themedir / "pass.png")
         image.show()
         self.passbutton = Gtk.Button()
+        self.passbutton.set_vexpand(True)
         self.passbutton.set_size_request(53, -1)
         self.passbutton.add(image)
         self.passbutton.connect("clicked", self.callback, "pass-crossfader")
@@ -3459,20 +3483,20 @@ class MainWindow(dbus.service.Object):
         passbox.pack_start(pvbox, True, True, 0)
         pvbox.show()
         sg4.add_widget(self.passbutton)
-      
+
         self.crossbox.pack_start(passbox, False, False, 0)
         cross_sizegroup.add_widget(passbox)
         passbox.show()
         self.crossbox.show()
-        
+
         abox = Gtk.HBox()
         abox.set_border_width(1)
         self.vbox6.pack_start(abox, False, False, 0)
         abox.show()
-        
+
         # We are done with vbox6 so lets show it
         self.vbox6.show()
-        
+
         # The various meters
         self.metereventbox = Gtk.EventBox()
         self.metereventbox.viewlevels = (5,)
@@ -3491,7 +3515,7 @@ class MainWindow(dbus.service.Object):
         self.micmeterbox = PaddedVBox(3, 2, 0, 0, 5)
         self.meterbox.pack_start(self.micmeterbox, False, False, 0)
         self.micmeterbox.show()
-        
+
         self.str_l_peak = PeakHoldMeter()
         self.str_r_peak = PeakHoldMeter()
         # TC: This text appears above the stream mix peak level meter.
@@ -3502,7 +3526,7 @@ class MainWindow(dbus.service.Object):
         set_tip(self.stream_peak_box, _('A peak hold meter indicating the '
                                         'signal strength of the stream audio.'))
 
-        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
+        sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
         self.stream_indicator = []
         for i in range(PGlobs.num_streamers):
             self.stream_indicator.append(StreamMeter(1, 100))
@@ -3526,7 +3550,7 @@ class MainWindow(dbus.service.Object):
         self.streammeterbox.pack_start(stream_vu_box)
         stream_vu_box.show()
         set_tip(stream_vu_box, _('A VU meter for the stream audio.'))
-         
+
         # TC: Appears above the mic meters as a label followed by a number.
         self.mic_meters = [MicMeter(_("Ch"), i)
                                 for i in range(1, PGlobs.num_micpairs * 2 + 1)]
@@ -3554,19 +3578,21 @@ class MainWindow(dbus.service.Object):
                 for each in l, r:
                     each.connect("state-changed", showhide, chhbox, l, r)
                     each.show()
-        
+
         set_tip(self.micmeterbox, _('A peak hold meter indicating the '
         'microphone signal strength and a meter indicating attenuation levels '
         'in the microphone signal processing system. Green indicates '
         'attenuation from the noise gate, yellow from the de-esser, red from '
         'the limiter.'))
-        
+
         # Aux players initialisation.
-        self.jingles = ExtraPlayers(self)
-        
+        self.background = Background(self)
+        page = self.player_nb.append_page(self.background, self.background.nb_label)
+
+        self.jingles = EffectsPlayers(self)
         page = self.player_nb.append_page(self.jingles, self.jingles.nb_label)
+        self.jingles_window = EffectsPlayersWindow(self.player_nb, page)
         self.player_nb.set_current_page(0)
-        self.jingles_window = ExtraPlayersWindow(self.player_nb, page)
 
         # Variable initialisation
         self.songname = u""
@@ -3599,16 +3625,16 @@ class MainWindow(dbus.service.Object):
         self.interlude_playing = SlotObject(0)
         self.player_left.playtime_elapsed = SlotObject(0)
         self.player_right.playtime_elapsed = SlotObject(0)
-        self.jingles.interlude.playtime_elapsed = SlotObject(0)
+        self.background.player.playtime_elapsed = SlotObject(0)
         self.player_left.mixer_playing = SlotObject(0)
         self.player_right.mixer_playing = SlotObject(0)
-        self.jingles.interlude.mixer_playing = SlotObject(0)
+        self.background.player.mixer_playing = SlotObject(0)
         self.player_left.mixer_signal_f = SlotObject(0)
         self.player_right.mixer_signal_f = SlotObject(0)
-        self.jingles.interlude.mixer_signal_f = SlotObject(0)
+        self.background.player.mixer_signal_f = SlotObject(0)
         self.player_left.mixer_cid = SlotObject(0)
         self.player_right.mixer_cid = SlotObject(0)
-        self.jingles.interlude.mixer_cid = SlotObject(0)
+        self.background.player.mixer_cid = SlotObject(0)
         self.left_compression_level = SlotObject(0)
         self.right_compression_level = SlotObject(0)
         self.left_deess_level = SlotObject(0)
@@ -3619,18 +3645,18 @@ class MainWindow(dbus.service.Object):
         self.jingles.mixer_interlude_cid = SlotObject(0)
         self.player_left.runout = SlotObject(0)
         self.player_right.runout = SlotObject(0)
-        self.jingles.interlude.runout = SlotObject(0)
+        self.background.player.runout = SlotObject(0)
         self.metadata_left_ctrl = SlotObject(0)
         self.metadata_right_ctrl = SlotObject(0)
         self.metadata_interlude_ctrl = SlotObject(0)
         self.player_left.silence = SlotObject(0.0)
         self.player_right.silence = SlotObject(0.0)
-        self.jingles.interlude.silence = SlotObject(0.0)
+        self.background.player.silence = SlotObject(0.0)
         self.sample_rate = SlotObject(0)
         self.effects_playing = SlotObject(0)
         self.channel_states = [-1, ] * 12
         self.dbus_voip_mode = -1
-             
+
         self.feature_set = Gtk.ToggleButton()
         self.feature_set.set_active(True)
         self.feature_set.connect("toggled", self.callback, "Features")
@@ -3643,7 +3669,7 @@ class MainWindow(dbus.service.Object):
         self.session_filename = "main_session"
         self.files_played = {}
         self.files_played_offline = {}
-        
+
         # Variable map for stuff read from the mixer
         self.vumap = {
             "str_l_peak"              : self.str_l_peak,
@@ -3652,32 +3678,32 @@ class MainWindow(dbus.service.Object):
             "str_r_rms"               : self.str_r_rms_vu,
             "left_elapsed"            : self.player_left.playtime_elapsed,
             "right_elapsed"           : self.player_right.playtime_elapsed,
-            "interlude_elapsed"       : self.jingles.interlude.playtime_elapsed,
+            "interlude_elapsed"       : self.background.player.playtime_elapsed,
             "left_playing"            : self.player_left.mixer_playing,
             "right_playing"           : self.player_right.mixer_playing,
             "jingles_playing"         : self.jingles_playing,
-            "interlude_playing"       : self.jingles.interlude.mixer_playing,
+            "interlude_playing"       : self.background.player.mixer_playing,
             "left_signal"             : self.player_left.mixer_signal_f,
             "right_signal"            : self.player_right.mixer_signal_f,
-            "interlude_signal"        : self.jingles.interlude.mixer_signal_f,
+            "interlude_signal"        : self.background.player.mixer_signal_f,
             "left_cid"                : self.player_left.mixer_cid,
             "right_cid"               : self.player_right.mixer_cid,
             "jingles_cid"             : self.jingles.mixer_jingles_cid,
-            "interlude_cid"           : self.jingles.interlude.mixer_cid,
+            "interlude_cid"           : self.background.player.mixer_cid,
             "left_audio_runout"       : self.player_left.runout,
             "right_audio_runout"      : self.player_right.runout,
-            "interlude_audio_runout"  : self.jingles.interlude.runout,
+            "interlude_audio_runout"  : self.background.player.runout,
             "left_additional_metadata"  : self.metadata_left_ctrl,
             "right_additional_metadata" : self.metadata_right_ctrl,
             "interlude_additional_metadata" : self.metadata_interlude_ctrl,
             "left_silence"            : self.player_left.silence,
             "right_silence"           : self.player_right.silence,
-            "interlude_silence"       : self.jingles.interlude.silence,
+            "interlude_silence"       : self.background.player.silence,
             "sample_rate"             : self.sample_rate,
             "effects_playing"         : self.effects_playing,
             "freewheel_mode"          : self.freewheel_button
             }
-            
+
         for i, mic in enumerate(self.mic_meters):
             self.vumap.update({"mic_%d_levels" % (i + 1): mic})
 
@@ -3685,10 +3711,10 @@ class MainWindow(dbus.service.Object):
         self.controls.load_prefs()
 
         self.window.realize()
-        media_sg = Gtk.SizeGroup(Gtk.SizeGroupMode.HORIZONTAL)
+        media_sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.HORIZONTAL)
         media_sg.add_widget(self.vbox3L)
         media_sg.add_widget(self.vbox3R)
-        
+
         self.menu.playersmenu_i.set_active(True)
         self.menu.playersmenu_i.connect("activate",
                             lambda w: self.player_nb.set_visible(w.get_active()))
@@ -3698,7 +3724,7 @@ class MainWindow(dbus.service.Object):
                     "activate", lambda w: self.server_window.window.present())
         self.menu.prefsmenu_i.connect(
                     "activate", lambda w: self.prefs_window.window.present())
-                        
+
         if pm.profile is not None:
             self.menu.profilesmenu_i.connect(
                     "activate", lambda w: pm.profile_dialog.present())
@@ -3712,61 +3738,56 @@ class MainWindow(dbus.service.Object):
         self.jack = JackMenu(self.menu, lambda s, r: self.mixer_write(
                     "ACTN=jack%s\n%s" % (s, r)), lambda: self.mixer_read())
         self.jack.load(startup=True)
-        
+
         self.server_window = SourceClientGui(self)
         self.prefs_window = mixprefs(self)
         self.prefs_window.load_player_prefs()
         self.prefs_window.apply_player_prefs()
-        
         self.vutimeout = timeout_add(50, self.vu_update)
         self.statstimeout = timeout_add(100, self.stats_update)
 
         self.savetimeout = timeout_add_seconds(
-                                120, threadslock(self.save_session), "periodic")
-
+                                120, self.save_session, "periodic")
         (self.full_wst, self.min_wst)[bool(self.simplemixer)].apply()
         self.window.connect("configure_event", self.configure_event)
-        self.jingles.interlude.listen.set_active(False)
+        self.background.player.listen.set_active(False)
 
         if self.prefs_window.restore_session_option.get_active():
             print("Restoring previous session")
             self.player_left.restore_session()
             self.player_right.restore_session()
             self.jingles.restore_session()
+            self.background.player.restore_session()
             self.restore_session()
 
         self.session_loaded = True
-         
-        self.window.set_focus_chain((self.player_left.scrolllist,
-                                        self.player_right.scrolllist,
-                                        self.jingles.interlude.scrolllist))
-         
+
         self.server_window.update_metadata()
         self.window.forall(self.strip_focusability)
         self.topleftpane.repair_focusability()
         self.player_left.treeview.set_can_focus(True)
         self.player_right.treeview.set_can_focus(True)
-        self.jingles.interlude.treeview.set_can_focus(True)
+        self.background.player.treeview.set_can_focus(True)
         self.player_left.treeview.grab_focus()
-      
+
         self.window.add_events(Gdk.EventMask.KEY_PRESS_MASK)
         self.window.connect("key-press-event", self.cb_key_capture)
         self.window.connect("key-release-event", self.cb_key_capture)
         self.jingles_window.connect("key-press-event", self.cb_key_capture)
         self.jingles_window.connect("key-release-event", self.cb_key_capture)
-      
+
         self.window.show()
         idle_add(lambda: self.prefs_window.window.realize() and False)
-        
+
         self.player_left.treeview.emit("cursor-changed")
         self.player_right.treeview.emit("cursor-changed")
-                
+
         # DBus object initialization
         dbus.service.Object.__init__(self,
                     pm.dbus_bus_name, PGlobs.dbus_objects_basename + "/main")
 
         for sig in signal.SIGINT, signal.SIGTERM, signal.SIGHUP:
-            signal.signal(int(sig), lambda s, f: idle_add(threadslock(self.destroy)))
+            signal.signal(int(sig), lambda s, f: idle_add(self.destroy))
 
         if args.channels is not None:
             for each in args.channels:
@@ -3798,7 +3819,7 @@ class MainWindow(dbus.service.Object):
             for n in range(len(servtabs)):
                 if chr(n + ord("1")) in args.servers:
                     servtabs[n].server_connect.set_active(True)
-    
+
         if args.crossfader is not None:
             if args.crossfader == "1":
                 self.passleft.clicked()
@@ -3811,8 +3832,8 @@ class MainWindow(dbus.service.Object):
             if "2" in args.players:
                 self.player_right.play.clicked()
             if "3" in args.players:
-                self.jingles.interlude.play.clicked()
-                    
+                self.background.player.play.clicked()
+
     def main(self):
         Gtk.main()
 

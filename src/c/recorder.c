@@ -149,13 +149,13 @@ static int recorder_write_id3_tag(struct recorder *self, FILE *fp)
     id3_tag_destroy(tag);
     return SUCCEEDED;
     }
-    
+
 static int recorder_create_mp3_cuesheet(struct recorder *self)
     {
     struct metadata_item *mi;
     FILE *fp;
     int i, mm, ss, ff;
-    
+
     if (!(fp = fopen(self->cuepathname, "wb")))
         {
         fprintf(stderr, "recorder_write_mp3_cue_sheet: failed to open cue sheet file for writing\n");
@@ -165,7 +165,7 @@ static int recorder_create_mp3_cuesheet(struct recorder *self)
     fprintf(fp, "TITLE \"%s\"\r\n", self->timestamp);
     fprintf(fp, "PERFORMER \"Recorded with IDJC\"\r\n");
     fprintf(fp, "FILE \"%s\" MP3\r\n", strrchr(self->pathname, '/') + 1);
-    
+
     for (i = 1, mi = self->mi_first; mi; i++, mi = mi->next)
         {
         fprintf(fp, "  TRACK %02d AUDIO\r\n", i);
@@ -175,7 +175,7 @@ static int recorder_create_mp3_cuesheet(struct recorder *self)
             fprintf(fp, "    PERFORMER \"%s\"\r\n", mi->artist);
         if (mi->album[0])
             fprintf(fp, "    REM ALBUM \"%s\"\r\n", mi->album);
-        
+
         /* the first index must be zero - it's in the cue file standard */
         if (i > 1)
             {
@@ -187,11 +187,11 @@ static int recorder_create_mp3_cuesheet(struct recorder *self)
             mm = ss =ff = 0;
         fprintf(fp, "    INDEX 01 %02d:%02d:%02d\r\n", mm, ss, ff);
         }
-    
+
     fclose(fp);
     return SUCCEEDED;
     }
-        
+
 static int recorder_write_xing_tag(struct recorder *self, FILE *fp)
     {
     int mpeg1_f, mono_f;
@@ -204,7 +204,7 @@ static int recorder_write_xing_tag(struct recorder *self, FILE *fp)
 
     if (!self->include_xing_tag)
         return SUCCEEDED;
-    
+
     if (self->mi2_first == NULL)
         {
         fprintf(stderr, "recorder_write_xing_tag: no metadata collected, skipping vbr tag\n");
@@ -236,7 +236,7 @@ static int recorder_write_xing_tag(struct recorder *self, FILE *fp)
         if (!(fwrite("Info\x00\x00\x00\x03", 8, 1, fp)))
             return FAILED;
     /* the following calculation is fake for files with varying sample rates
-     * however the players which use this value will probably only use it 
+     * however the players which use this value will probably only use it
      * for calclulating the play duration which will yield the intended result */
     total_frames = (int)(self->mi2_first->sample_rate * (double)self->recording_length_ms / (samples_per_frame * 1000.0) + 0.5);
     fputc((total_frames >> 24) & 0xFF, fp);
@@ -285,7 +285,7 @@ static void recorder_apply_mp3_tags(struct recorder *self)
     FILE *fpr, *fpw;
     char buffer[2048];
     int bytes;
-    
+
     if (!(tmpname = malloc(strlen(self->pathname) + 5)))
         {
         fprintf(stderr, "recorder_apply_mp3_tags: malloc failure\n");
@@ -307,7 +307,7 @@ static void recorder_apply_mp3_tags(struct recorder *self)
         free(tmpname);
         return;
         }
-        
+
     if (!fread(self->first_mp3_header, 4, 1, fpr))
         {
         fprintf(stderr, "failed to obtain the first four bytes of the recording\n");
@@ -316,9 +316,9 @@ static void recorder_apply_mp3_tags(struct recorder *self)
         unlink(tmpname);
         free(tmpname);
         return;
-        } 
+        }
     rewind(fpr);
-        
+
     if (!(recorder_write_id3_tag(self, fpw) && recorder_write_xing_tag(self, fpw)))
         {
         fprintf(stderr, "recorder_apply_mp3_tags: failed to tag the mp3 file\n");
@@ -358,7 +358,7 @@ static void recorder_apply_mp3_tags(struct recorder *self)
 static void recorder_append_metadata2(struct recorder *self, struct encoder_op_packet *packet)
     {
     struct metadata_item2 *mi2;
-    
+
     if (!(mi2 = calloc(1, sizeof (struct metadata_item2))))
         {
         fprintf(stderr, "recorder_append_metadata2: malloc failure\n");
@@ -410,7 +410,7 @@ static void recorder_append_metadata2(struct recorder *self, struct encoder_op_p
 static void recorder_free_metadata2(struct recorder *self)
     {
     struct metadata_item2 *mi2, *oldmi2;
-    
+
     for (mi2 = self->mi2_first; mi2;)
         {
         oldmi2 = mi2;
@@ -496,7 +496,7 @@ static void recorder_append_metadata(struct recorder *self, struct encoder_op_pa
 static void recorder_free_metadata(struct recorder *self)
     {
     struct metadata_item *mi, *oldmi;
-    
+
     for (mi = self->mi_first; mi;)
         {
         oldmi = mi;
@@ -532,7 +532,7 @@ static void *recorder_main(void *args)
     char *rl, *rr, *w, *endp;
     size_t nbytes;
     int m, s, f;
-     
+
     sig_mask_thread();
     while (!self->thread_terminate_f)
         {
@@ -570,7 +570,7 @@ static void *recorder_main(void *args)
                         }
                     self->recording_length_s = self->sf_samples / self->sfinfo.samplerate;
                     self->recording_length_ms = self->sf_samples * 1000 / self->sfinfo.samplerate;
-                    
+
                     if (self->stop_request)
                         {
                         self->stop_request = FALSE;
@@ -581,11 +581,11 @@ static void *recorder_main(void *args)
                         self->pause_request = FALSE;
                         self->record_mode = RM_PAUSED;
                         }
-                        
+
                     if (self->new_artist_title)
                         {
                         fprintf(self->fpcue, "  TRACK %02d AUDIO\r\n", ++self->artist_title_writes);
-                        
+
                         pthread_mutex_lock(&self->artist_title_mutex);
                         self->new_artist_title = FALSE;
                         fprintf(self->fpcue, "    TITLE \"%s\"\r\n", self->title);
@@ -593,9 +593,14 @@ static void *recorder_main(void *args)
                         fprintf(self->fpcue, "    REM ALBUM \"%s\"\r\n", self->album);
                         pthread_mutex_unlock(&self->artist_title_mutex);
 
-                        s = self->recording_length_s % 60;
-                        m = self->recording_length_s / 60;
-                        f = self->recording_length_ms % 1000 * 75 / 1000;
+                        if (self->artist_title_writes > 1) {
+                            s = self->recording_length_s % 60;
+                            m = self->recording_length_s / 60;
+                            f = self->recording_length_ms % 1000 * 75 / 1000;
+                        } else
+                            /* first track forced to start at offset 0 despite late metadata*/
+                            m = s = f = 0;
+
                         fprintf(self->fpcue, "    INDEX 01 %02d:%02d:%02d\r\n", m, s, f);
                         }
                     }
@@ -659,7 +664,7 @@ static void *recorder_main(void *args)
                         {
                         jack_ringbuffer_read(self->input_rb[0], self->left, nbytes);
                         }
-                        
+
                     if (self->unpause_request)
                         {
                         self->unpause_request = FALSE;
@@ -675,8 +680,9 @@ static void *recorder_main(void *args)
                     sf_close(self->sf);
                     fclose(self->fpcue);
                     self->jack_dataflow_control = JD_FLUSH;
-                    while (self->jack_dataflow_control != JD_OFF)
+                    while (self->jack_dataflow_control != JD_OFF) {
                         nanosleep(&ms10, NULL);
+                    }
                     jack_ringbuffer_free(self->input_rb[0]);
                     jack_ringbuffer_free(self->input_rb[1]);
                     free(self->left);
@@ -718,6 +724,7 @@ static void *recorder_main(void *args)
                 self->fp = NULL;
                 self->pathname = NULL;
                 self->cuepathname = NULL;
+                self->artist_title_writes = 0;
                 self->encoder_op = NULL;
                 self->stop_request = FALSE;
                 self->stop_pending = FALSE;
@@ -739,14 +746,22 @@ int recorder_make_report(struct recorder *self)
     return SUCCEEDED;
     }
 
+char *recorder_default_dup(char *orig)
+    {
+    if (!orig || orig[0] == '\0')
+        return strdup("no data");
+    return strdup(orig);
+    }
+
 int recorder_new_metadata(struct recorder *self, char *artist, char *title, char *album)
     {
     char *new_artist, *new_title, *new_album;
     char *old_artist, *old_title, *old_album;
-    
-    new_artist = strdup(artist);
-    new_title = strdup(title);
-    new_album = strdup(album);
+
+    new_artist = recorder_default_dup(artist);
+    new_title = recorder_default_dup(title);
+    new_album = recorder_default_dup(album);
+
     if (!new_artist || !new_title || !new_album)
         {
         fprintf(stderr, "recorder_new_metadata: malloc failure\n");
@@ -755,18 +770,18 @@ int recorder_new_metadata(struct recorder *self, char *artist, char *title, char
     old_artist = self->artist;
     old_title = self->title;
     old_album = self->album;
-    
+
     pthread_mutex_lock(&self->artist_title_mutex);
     self->artist = new_artist;
     self->title = new_title;
     self->album = new_album;
     self->new_artist_title = TRUE;
     pthread_mutex_unlock(&self->artist_title_mutex);
-    
+
     free(old_artist);
     free(old_title);
     free(old_album);
-    
+
     return SUCCEEDED;
     }
 
@@ -795,7 +810,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             }
         }
     else
-        {      
+        {
         if (!(self->encoder_op = encoder_register_client(ti, atoi(rv->record_source))))
             {
             fprintf(stderr, "recorder_start: failed to register with encoder\n");
@@ -868,7 +883,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
                 return FAILED;
                 }
             }
-                
+
         }
 
     if (!(self->pathname = malloc(pathname_size = strlen(rv->record_folder) + 1
@@ -924,7 +939,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             fprintf(self->fpcue, "PERFORMER \"Recorded with IDJC\"\r\n");
             fprintf(self->fpcue, "FILE \"%s\" WAVE\r\n", strrchr(self->pathname, '/') + 1);
             }
-        
+
         self->sfinfo.samplerate = ti->audio_feed->sample_rate;
         self->sfinfo.channels = 2;
         self->sfinfo.format = SF_FORMAT_FLAC | SF_FORMAT_PCM_24;
@@ -937,7 +952,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             fprintf(stderr, "recorder_start: unable to initialise FLAC encoder\n");
             return FAILED;
             }
-            
+
         self->input_rb[0] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
         self->input_rb[1] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
         if (!(self->input_rb[0] && self->input_rb[1]))
@@ -950,7 +965,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             fprintf(stderr, "recorder_start: failed to create ringbuffers\n");
             return FAILED;
             }
-        self->jack_dataflow_control = JD_ON;  
+        self->jack_dataflow_control = JD_ON;
         self->initial_serial = -1;
         self->new_artist_title = TRUE; /* risk inheriting old metadata rather than start with empty */
         fprintf(stderr, "recorder_start: in FLAC mode\n");
@@ -960,14 +975,14 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
     pthread_mutex_lock(&self->mode_mutex);
     if (self->pause_request == TRUE)
         self->record_mode = RM_PAUSED;
-    else 
+    else
         self->record_mode = RM_RECORDING;
     pthread_cond_signal(&self->mode_cv);
     pthread_mutex_unlock(&self->mode_mutex);
     fprintf(stderr, "recorder_start: device %d activated\n", self->numeric_id);
     return SUCCEEDED;
     }
-    
+
 int recorder_stop(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct recorder *self = ti->recorder[uv->tab];
@@ -984,7 +999,7 @@ int recorder_stop(struct threads_info *ti, struct universal_vars *uv, void *othe
     fprintf(stderr, "recorder_stop: device %d stopped\n", self->numeric_id);
     return SUCCEEDED;
     }
-    
+
 int recorder_pause(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct recorder *self = ti->recorder[uv->tab];
@@ -1011,12 +1026,12 @@ int recorder_pause(struct threads_info *ti, struct universal_vars *uv, void *oth
         }
     return SUCCEEDED;
     }
-    
+
 int recorder_unpause(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct recorder *self = ti->recorder[uv->tab];
     struct timespec ms10 = { 0, 10000000 };
-    
+
     self->pause_request = FALSE;
     self->unpause_request = TRUE;
     if (self->record_mode == RM_PAUSED)
@@ -1037,7 +1052,7 @@ int recorder_unpause(struct threads_info *ti, struct universal_vars *uv, void *o
 struct recorder *recorder_init(struct threads_info *ti, int numeric_id)
     {
     struct recorder *self;
-    
+
     if (!(self = calloc(1, sizeof (struct recorder))))
         {
         fprintf(stderr, "recorder_init: malloc failure\n");
@@ -1045,9 +1060,9 @@ struct recorder *recorder_init(struct threads_info *ti, int numeric_id)
         }
     self->threads_info = ti;
     self->numeric_id = numeric_id;
-    self->artist = strdup("");
-    self->title = strdup("");
-    self->album = strdup("");
+    self->artist = strdup("no data");
+    self->title = strdup("no data");
+    self->album = strdup("no data");
     pthread_mutex_init(&self->artist_title_mutex, NULL);
     pthread_mutex_init(&self->mode_mutex, NULL);
     pthread_cond_init(&self->mode_cv, NULL);

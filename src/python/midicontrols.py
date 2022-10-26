@@ -20,9 +20,9 @@ import sys
 import re
 import os.path
 import time
-import collections
 import gettext
 import functools
+from collections.abc import MutableSet
 
 import gi
 from gi.repository import GObject
@@ -34,8 +34,6 @@ import dbus
 import dbus.service
 
 from idjc import FGlobs, PGlobs
-from .gtkstuff import threadslock
-from .gtkstuff import timeout_add, source_remove
 from .gtkstuff import TextSpinButton
 from .prelims import ProfileManager
 from .tooltips import set_tip
@@ -496,7 +494,7 @@ dbusify = functools.partial(dbus.service.method, dbus_interface=PGlobs.dbus_bus_
 # Controls ___________________________________________________________________
 
 
-class RepeatCache(collections.MutableSet):
+class RepeatCache(MutableSet):
     """A smart keyboard repeat cache -- implements time to live.
 
     Downstrokes are logged along with the time. Additional downstrokes
@@ -708,7 +706,7 @@ class Controls(dbus.service.Object):
             else:
                 n = 1
 
-        return (main.player_left, main.player_right, main.jingles.interlude)[n]
+        return (main.player_left, main.player_right, main.background.player)[n]
 
     # Control implementations. The @action_method decorator records all control
     # methods in order, so the order they are defined in this code dictates the
@@ -1521,12 +1519,14 @@ class BindingEditor(Gtk.Dialog):
         Gtk.Dialog.__init__(self,
             # TC: Dialog window title text.
             # TC: User is expected to edit a control binding.
-            _('Edit control binding'), owner.owner.owner.prefs_window.window,
-            Gtk.DialogFlags.DESTROY_WITH_PARENT | Gtk.DialogFlags.MODAL,
-            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OK, Gtk.ResponseType.OK))
+            title=_('Edit control binding'),
+            transient_for=owner.owner.owner.prefs_window.window,
+            modal=True,
+            destroy_with_parent=True)
 
-        Gtk.Dialog.set_resizable(self, False)
+        self.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
+        self.add_button(_("OK"), Gtk.ResponseType.OK)
+        self.set_resizable(False)
         owner.owner.owner.window_group.add_window(self)
         self.connect('delete_event', self.on_delete)
         self.connect('close', self.on_close)
@@ -1536,7 +1536,7 @@ class BindingEditor(Gtk.Dialog):
         #
         # TC: After clicking this button the binding editor will be listening
         # TC: for a key press or midi control surface input.
-        self.learn_button = Gtk.ToggleButton(_('Listen for input...'))
+        self.learn_button = Gtk.ToggleButton.new_with_label(_('Listen for input...'))
         self.learn_button.connect('toggled', self.on_learn_toggled)
         self.learn_timer = None
 
@@ -1544,14 +1544,14 @@ class BindingEditor(Gtk.Dialog):
                                 self.control_sources, self.owner.source_icons)
         self.source_field.connect('changed', self.on_source_changed)
         # TC: The input source.
-        self.source_label = Gtk.Label(_('Source'))
+        self.source_label = Gtk.Label.new(_('Source'))
 
         # TC: The midi channel.
-        self.channel_label = Gtk.Label(_('Channel'))
+        self.channel_label = Gtk.Label.new(_('Channel'))
         self.channel_field = ModifierSpinButton(ChannelAdjustment())
 
-        self.control_label = Gtk.Label(self.binding_controls['c'])
-        self.control_field = CustomSpinButton(Gtk.Adjustment(0, 0, 127, 1))
+        self.control_label = Gtk.Label.new(self.binding_controls['c'])
+        self.control_field = CustomSpinButton(Gtk.Adjustment(value=0, lower=0, upper=127, step_increment=1))
 
         # Control editing
         #
@@ -1563,21 +1563,21 @@ class BindingEditor(Gtk.Dialog):
         self.method_field.connect('changed', self.on_method_changed)
 
         # TC: The manner in which the input is interpreted.
-        self.mode_label = Gtk.Label(_('Interaction'))
+        self.mode_label = Gtk.Label.new(_('Interaction'))
         self.mode_field = LookupComboBox(Binding.MODES, self.control_modes)
         self.mode_field.connect('changed', self.on_mode_changed)
 
         # TC: The effect of the control can be directed upon a specific target.
         # TC: e.g. On target [Left player]
-        self.target_label = Gtk.Label(_('On target'))
+        self.target_label = Gtk.Label.new(_('On target'))
         self.target_field = CustomSpinButton(TargetAdjustment('p'))
 
-        self.value_label = Gtk.Label(self.binding_values[Binding.MODE_SET])
+        self.value_label = Gtk.Label.new(self.binding_values[Binding.MODE_SET])
         self.value_field_scale = ValueSnapHScale(0, -127, 127)
         dummy = ValueSnapHScale(0, -127, 127)
         # TC: Checkbutton text.
         # TC: Use reverse scale and invert the meaning of button presses.
-        self.value_field_invert = Gtk.CheckButton(_('Reversed'))
+        self.value_field_invert = Gtk.CheckButton.new_with_label(_('Reversed'))
         self.value_field_pulse_noinvert = Gtk.RadioButton.new_with_label(None, _('Pressed'))
         self.value_field_pulse_inverted = Gtk.RadioButton.new_with_label_from_widget(
                                 self.value_field_pulse_noinvert, _('Released'))
@@ -1587,9 +1587,10 @@ class BindingEditor(Gtk.Dialog):
         for label in (self.source_label, self.channel_label, self.control_label,
                         self.mode_label, self.target_label, self.value_label):
             label.set_width_chars(10)
-            label.set_alignment(0, 0.5)
+            label.set_xalign(0.0)
+            label.set_yalign(0.5)
 
-        sg = Gtk.SizeGroup(Gtk.SizeGroupMode.VERTICAL)
+        sg = Gtk.SizeGroup.new(Gtk.SizeGroupMode.VERTICAL)
 
         row0, row1, row2, row3= Gtk.HBox(spacing=4), Gtk.HBox(spacing=4), \
                                 Gtk.HBox(spacing=4), Gtk.HBox(spacing=4)
@@ -1814,9 +1815,10 @@ class ValueSnapHScale(Gtk.HBox):
         self.set_spacing(2)
         self.label = Gtk.Label()
         self.label.set_width_chars(4)
-        self.label.set_alignment(1.0, 0.5)
+        self.label.set_xalign(1.0)
+        self.label.set_yalign(0.5)
         self.pack_start(self.label, False)
-        self.hscale = Gtk.HScale()
+        self.hscale = Gtk.Scale()
         self.hscale.connect('change-value', self.on_change_value)
         self.hscale.connect('value-changed', self.on_value_changed)
         # We draw our own value so we can control the alignment.
@@ -1833,11 +1835,11 @@ class ValueSnapHScale(Gtk.HBox):
         # Here snap also doubles as the boundary value.
         self.snap = snap
         if snap is not None:
-            adj = Gtk.Adjustment(
+            adj = Gtk.Adjustment.new(
                     val, lower, upper + snap - 1, snap * 2, snap * 2, snap-1)
             adj.connect('notify::value', self.on_value_do_snap, lower, upper)
         else:
-            adj = Gtk.Adjustment(val, lower, upper, 1, 6)
+            adj = Gtk.Adjustment.new(val, lower, upper, 1, 6, 0)
         if self.can_mark:
             self.hscale.clear_marks()
             if not self.snap:
@@ -1872,66 +1874,66 @@ class ValueSnapHScale(Gtk.HBox):
 # Extended adjustments for custom SpinButtons
 #
 class ChannelAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 15, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=15, step_increment=1)
     def read_input(self, text):
         return int(text)-1
     def write_output(self, value):
         return str(int(value+1))
 
 class ModifierAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 127, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=127, step_increment=1)
     def read_input(self, text):
         return Binding.modifier_to_ord(Binding.str_to_modifier(text))
     def write_output(self, value):
         return Binding.modifier_to_str(Binding.ord_to_modifier(int(value)))
 
 class NoteAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 127, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=127, step_increment=1)
     def read_input(self, text):
         return Binding.str_to_note(text)
     def write_output(self, value):
         return Binding.note_to_str(int(value))
 
 class KeyAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 0xFFFF, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=0xFFFF, step_increment=1)
     def read_input(self, text):
         return Binding.str_to_key(text)
     def write_output(self, value):
         return Binding.key_to_str(int(value))
 
 class PlayerAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 4, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=4, step_increment=1)
     def read_input(self, text):
         return control_targets_players.index(text)
     def write_output(self, value):
         return control_targets_players[max(min(int(value), 4), 0)]
 
 class EffectsBankAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
-        CustomAdjustment.__init__(self, value, 0, 2, 1)
+    def __init__(self, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper=2, step_increment=1)
     def read_input(self, text):
         return control_targets_effects_bank.index(text)
     def write_output(self, value):
         return control_targets_effects_bank[max(min(int(value), 2), 0)]
 
 class TargetAdjustment(CustomAdjustment):
-    def __init__(self, group, value = 0):
-        CustomAdjustment.__init__(self, value, 0, {
-                        'p': 3, 'm': 11, 'k': 23, 's': 8, 'r': 3, 'l': 8}
-                                                                    [group], 1)
+    def __init__(self, group, value=0):
+        CustomAdjustment.__init__(self, value=value, lower=0, upper={
+                'p': 3, 'm': 11, 'k': 23, 's': 8, 'r': 3, 'l': 8}[group],
+                                                    step_increment=1)
         self._group = group
     def read_input(self, text):
         return int(text.rsplit(' ', 1)[-1])-1
     def write_output(self, value):
-        return '{} {:d}'.format(control_targets[self._group], value+1)
+        return '{} {:d}'.format(control_targets[self._group], int(value) + 1)
 
 class SingularAdjustment(CustomAdjustment):
-    def __init__(self, value = 0):
+    def __init__(self, value=0):
         CustomAdjustment.__init__(self)
     def read_input(self, text):
         return 0.0
@@ -2004,9 +2006,10 @@ class ControlsUI(Gtk.VBox):
         column_target.set_sort_column_id(2)
 
         model = BindingListModel(self)
-        model_sort = Gtk.TreeModelSort(model)
+        model_sort = Gtk.TreeModelSort.new_with_model(model)
         model_sort.set_sort_column_id(2, Gtk.SortType.ASCENDING)
-        self.tree = Gtk.TreeView(model_sort)
+        self.tree = Gtk.TreeView.new()
+        self.tree.set_model(model_sort)
         self.tree.connect('cursor-changed', self.on_cursor_changed)
         self.tree.connect('key-press-event', self.on_tree_key)
         self.tree.connect('query-tooltip', self.on_tooltip_query)
@@ -2015,18 +2018,17 @@ class ControlsUI(Gtk.VBox):
         self.tree.append_column(column_action)
         self.tree.append_column(column_target)
         self.tree.set_headers_visible(True)
-        self.tree.set_rules_hint(True)
         self.tree.set_enable_search(False)
         self.tree.set_has_tooltip(True)
 
         # New/Edit/Remove buttons
         #
         # TC: User to create a new input binding.
-        self.new_button = Gtk.Button(stock=Gtk.STOCK_NEW)
+        self.new_button = Gtk.Button.new_with_label(_("New"))
         # TC: User to remove an input binding.
-        self.remove_button = Gtk.Button(stock=Gtk.STOCK_DELETE)
+        self.remove_button = Gtk.Button.new_with_label(_("Delete"))
         # TC: User to modify an existing input binding.
-        self.edit_button = Gtk.Button(stock=Gtk.STOCK_EDIT)
+        self.edit_button = Gtk.Button.new_with_label(_("Edit"))
         self.new_button.connect('clicked', self.on_new)
         self.remove_button.connect('clicked', self.on_remove)
         self.edit_button.connect('clicked', self.on_edit)
@@ -2065,10 +2067,10 @@ class ControlsUI(Gtk.VBox):
                 hbox = Gtk.HBox()
                 hbox.set_spacing(3)
                 hbox.pack_start(Gtk.Image.new_from_pixbuf(row[3].copy()), False)
-                hbox.pack_start(Gtk.Label(row[4]), False)
-                hbox.pack_start(Gtk.Label("  " + row[5] + row[6]), False)
+                hbox.pack_start(Gtk.Label.new(row[4]), False)
+                hbox.pack_start(Gtk.Label.new("  " + row[5] + row[6]), False)
                 if row[7]:
-                    hbox.pack_start(Gtk.Label("  " + row[7]), False)
+                    hbox.pack_start(Gtk.Label.new("  " + row[7]), False)
                 hbox.show_all()
                 tooltip.set_custom(hbox)
                 return True
@@ -2173,7 +2175,7 @@ class BindingListModel(GObject.GObject, Gtk.TreeModel):
         it = Gtk.TreeIter()
         self.set_user_data(it, user_data)
         return it
-        
+
     def do_get_flags(self):
         return Gtk.TreeModelFlags.LIST_ONLY | Gtk.TreeModelFlags.ITERS_PERSIST
 

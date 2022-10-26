@@ -22,12 +22,13 @@ import time
 
 import gi
 from gi.repository import Gtk
+from gi.repository import Gdk
 from gi.repository import GLib
 from gi.repository import Pango
 
 from idjc import FGlobs
 from idjc.prelims import ProfileManager
-from .gtkstuff import threadslock, idle_add
+from .gtkstuff import idle_add
 
 import gettext
 t = gettext.translation(FGlobs.package_name, FGlobs.localedir, fallback=True)
@@ -39,7 +40,7 @@ pm = ProfileManager()
 
 class dialog_group:
     """A mutually exclusive list of dialogs
-    
+
     Only one can be on screen at a time.
     The dialogs below can call the hide method to remove any other dialogs.
     """
@@ -59,15 +60,15 @@ class disconnection_notification_dialog(Gtk.Dialog):
 
 
     def window_attn(self, widget, event):
-        if event.new_window_state | Gdk.WINDOW_STATE_ICONIFIED:
+        if event.new_window_state | Gdk.WindowState.ICONIFIED:
             widget.set_urgency_hint(True)
         else:
             widget.set_urgency_hint(False)
-    
+
     def respond(self, dialog, response):
         if response in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
             dialog.hide()
-    
+
     def present(self):
         self.dial_group.hide(self)
         Gtk.Dialog.present(self)
@@ -78,10 +79,10 @@ class disconnection_notification_dialog(Gtk.Dialog):
             window_title = pm.title_extra.strip()
         else:
             window_title += pm.title_extra
-        
-        Gtk.Dialog.__init__(self, window_title, None,
-                                        Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                                        (Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE))
+
+        Gtk.Dialog.__init__(self, title=window_title,
+                            destroy_with_parent=True)
+        self.add_button(_("Close"), Gtk.ResponseType.CLOSE)
         if window_group is not None:
             window_group.add_window(self)
         self.set_resizable(False)
@@ -90,25 +91,27 @@ class disconnection_notification_dialog(Gtk.Dialog):
         self.connect("close", self.respond)
         self.connect("response", self.respond)
         self.connect("window-state-event", self.window_attn)
-        
+
         hbox = Gtk.HBox(False, 20)
         hbox.set_spacing(12)
         self.get_content_area().pack_start(hbox, True, True, 0)
         hbox.show()
         image = Gtk.Image()
-        image.set_alignment(0.5, 0)
-        image.set_from_stock(Gtk.STOCK_DISCONNECT, Gtk.IconSize.DIALOG)
+        image.set_halign(Gtk.Align.CENTER)
+        image.set_valign(Gtk.Align.START)
+        image.set_from_icon_name("network-offline-symbolic", Gtk.IconSize.DIALOG)
         hbox.pack_start(image, False)
         image.show()
         vbox = Gtk.VBox()
         hbox.pack_start(vbox, True, True, 0)
         vbox.show()
-        
+
         if text is not None:
             for each in text.splitlines():
-                label = Gtk.Label(each)
+                label = Gtk.Label.new(each)
                 label.set_use_markup(True)
-                label.set_alignment(0.0, 0.5)
+                label.set_xalign(0.0)
+                label.set_yalign(0.5)
                 vbox.pack_start(label, False)
                 label.show()
 
@@ -128,7 +131,7 @@ class autodisconnection_notification_dialog(Gtk.Dialog):
             widget.set_urgency_hint(True)
         else:
             widget.set_urgency_hint(False)
-    
+
     def respond(self, dialog, response, actionok = None, actioncancel = None):
         if response == Gtk.ResponseType.OK or response == Gtk.ResponseType.DELETE_EVENT:
             if actionok is not None:
@@ -146,9 +149,9 @@ class autodisconnection_notification_dialog(Gtk.Dialog):
                                     window_title = "", additional_text = None,
                                     actionok = None, actioncancel = None):
 
-        Gtk.Dialog.__init__(self, window_title, None,
-                        Gtk.DialogFlags.DESTROY_WITH_PARENT, (Gtk.STOCK_CANCEL,
-                        Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        Gtk.Dialog.__init__(self, title=window_title, destroy_with_parent=True)
+        self.add_buttons(_("Cancel"), Gtk.ResponseType.CANCEL,
+                         _("OK"), Gtk.ResponseType.OK)
         if window_group is not None:
             window_group.add_window(self)
         self.set_resizable(False)
@@ -156,20 +159,20 @@ class autodisconnection_notification_dialog(Gtk.Dialog):
         self.connect("response", self.respond, actionok, actioncancel)
         self.connect("window-state-event", self.window_attn)
         self.set_default_response(Gtk.ResponseType.OK)
-        
+
         hbox = Gtk.HBox(False, 20)
         hbox.set_border_width(20)
         self.vbox.pack_start(hbox, True, True, 0)
         hbox.show()
         image = Gtk.Image()
-        image.set_from_stock(Gtk.STOCK_DIALOG_WARNING, Gtk.IconSize.DIALOG)
+        image.set_from_icon_name("dialog-warning", Gtk.IconSize.DIALOG)
         hbox.pack_start(image, True, True, 0)
         image.show()
         vbox = Gtk.VBox()
         vbox.set_spacing(8)
         hbox.pack_start(vbox, True, True, 0)
         vbox.show()
-        
+
         if additional_text is not None:
             if type(additional_text) is str:
                 additional_text = additional_text.splitlines()
@@ -189,17 +192,17 @@ class autodisconnection_notification_dialog(Gtk.Dialog):
 
 class ReconnectionDialog(Gtk.Dialog):
     """Displayed when a reconnection is scheduled.
-    
+
     User may expedite or cancel the reconnection operation using this widget.
     """
-    
+
     td = (0.0,)
     # TC: The contents of <> and {} must not be changed.
     lines = _('<span weight="bold" size="12000">The connection to the server '
         'in tab {servertab} has failed.</span>\nA reconnection attempt will'
         ' be made in {countdown} seconds.\nThis is attempt number {attempt}'
         ' of {maxtries}.').splitlines()
-    
+
     def update_countdown_text(self):
         remaining = self.remaining
         self.remaining = int(self.event_time - time.time())
@@ -208,23 +211,22 @@ class ReconnectionDialog(Gtk.Dialog):
             if self.remaining == 0:
                 self.hide()
                 idle_add(self.reconnect_idle)
-                
-    @threadslock
+
     def reconnect_idle(self):
         self.tab.server_connect.set_active(True)
         if self.tab.server_connect.get_active() == False:
             self.activate()
-    
+
     def run(self):
         if self.active:
             self.update_countdown_text()
-    
+
     def activate(self):
         if not self.tab.troubleshooting.automatic_reconnection.get_active():
             self.deactivate()
             self.tab.scg.disconnected_dialog.present()
             return
-        
+
         if self.active == False:
             self.trycount = 0
             self.td = []
@@ -238,7 +240,7 @@ class ReconnectionDialog(Gtk.Dialog):
             self.active = True
         else:
             self.trycount += 1
-        
+
         repeat = self.config.reconnection_repeat.get_active()
 
         if not repeat and self.trycount >= len(self.td):
@@ -260,7 +262,7 @@ class ReconnectionDialog(Gtk.Dialog):
             self.realize()
         else:
             self.present()
-    
+
     def deactivate(self):
         if self.active:
             self.hide()
@@ -278,38 +280,41 @@ class ReconnectionDialog(Gtk.Dialog):
 
     def __init__(self, tab):
         self.tab = tab
-        Gtk.Dialog.__init__(self, pm.title_extra.strip(), None,
-                    Gtk.DialogFlags.DESTROY_WITH_PARENT, (Gtk.STOCK_CANCEL,
-                    Gtk.ResponseType.CANCEL, _('_Retry Now'), Gtk.ResponseType.OK))
+        Gtk.Dialog.__init__(self, title=pm.title_extra.strip(),
+                            destroy_with_parent=True)
+        self.add_buttons(_("Cancel"), Gtk.ResponseType.CANCEL,
+                         _('_Retry Now'), Gtk.ResponseType.OK)
         self.set_modal(False)
         self.set_resizable(False)
         self.set_border_width(6)
         self.vbox.set_spacing(12)
-        
+
         hbox = Gtk.HBox()
         hbox.set_spacing(12)
         self.get_content_area().pack_start(hbox, False, True, 0)
         hbox.show()
-        i = Gtk.Image.new_from_stock(Gtk.STOCK_DISCONNECT, Gtk.IconSize.DIALOG)
-        i.set_alignment(0.5, 0)
+        i = Gtk.Image.new_from_icon_name("network-offline-symbolic", Gtk.IconSize.DIALOG)
+        i.set_halign(Gtk.Align.CENTER)
+        i.set_valign(Gtk.Align.START)
         hbox.pack_start(i, False)
         i.show()
 
         vbox = Gtk.VBox()
         vbox.set_spacing(3)
         hbox.pack_start(vbox, False)
-        self.label1 = Gtk.Label(self.lines[0].format(
+        self.label1 = Gtk.Label.new(self.lines[0].format(
                                         servertab = tab.numeric_id + 1) + "\n")
         self.label1.set_use_markup(True)
-        self.label2 = Gtk.Label(self.lines[1].format(countdown = 0))
-        self.label3 = Gtk.Label(self.lines[2].format(attempt = 1, maxtries = 1))
+        self.label2 = Gtk.Label.new(self.lines[1].format(countdown = 0))
+        self.label3 = Gtk.Label.new(self.lines[2].format(attempt = 1, maxtries = 1))
         for l in (self.label1, self.label2, self.label3):
-            l.set_alignment(0.0, 0.5)
+            l.set_xalign(0.0)
+            l.set_yalign(0.5)
             vbox.pack_start(l, False)
             l.show()
-            
+
         vbox.show()
-            
+
         self.config = tab.troubleshooting
         self.active = False
 

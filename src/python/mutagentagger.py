@@ -58,26 +58,22 @@ def write_error_dialog(error, window):
     label.set_selectable(True)
     content_vbox.add(label)
     label.show()
-    dialog.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
+    dialog.add_button(_("OK"), Gtk.ResponseType.OK)
     dialog.run()
     dialog.destroy()
 
 
-class LeftLabel(Gtk.HBox):
-    """Use in place of Gtk.Label where left justification is needed."""
-    
-    def __init__(self, text):
-        Gtk.HBox.__init__(self)
-        self.label = Gtk.Label(text)
-        self.pack_start(self.label, False, False, 0)
+def mono_label(text):
+    label = Gtk.Label.new(f"<span font-family='monospace'>{text}</span>")
+    label.set_use_markup(True)
+    label.set_margin_top(2)
+    return label
 
 
-class RightLabel(Gtk.HBox):
-    """Use in place of Gtk.Label where right justification is needed."""
-    
-    def __init__(self, text):
-        Gtk.HBox.__init__(self)
-        self.pack_end(Gtk.Label(text), False, False, 0)
+def right_label(text):
+    label = Gtk.Label.new(text)
+    label.set_xalign(1.0)
+    return label
 
 
 class FreeTagFrame(Gtk.Frame):
@@ -88,17 +84,24 @@ class FreeTagFrame(Gtk.Frame):
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
         self.add(sw)
         sw.show()
-        self.tb = Gtk.TextBuffer()
-        tv = Gtk.TextView.new_with_buffer(self.tb)
-        tv.set_wrap_mode(Gtk.WrapMode.CHAR)
-        tv.modify_font(Pango.FontDescription('sans 12'))
-        sw.add(tv)
-        tv.show()
+
+        text_view = Gtk.TextView()
+        text_view.set_wrap_mode(Gtk.WrapMode.CHAR)
+        self.text_buffer = text_view.get_buffer()
+        text_tag = self.text_buffer.create_tag("font", font="monospace 11")
+        sw.add(text_view)
+        text_view.show()
+        self.text_buffer.connect("changed", self._on_buffer_changed)
+
+    def _on_buffer_changed(self, text_buffer):
+        """Keep all text in the same font."""
+
+        text_buffer.apply_tag_by_name("font", *text_buffer.get_bounds())
 
 
 class MutagenTagger(Gtk.VBox):
     """Base class for ID3Tagger and NativeTagger."""
-    
+
     def __init__(self, pathname):
         Gtk.VBox.__init__(self)
         self.pathname = pathname
@@ -106,16 +109,16 @@ class MutagenTagger(Gtk.VBox):
 
 class WMATagger(MutagenTagger):
     """Handles tagging of WMA files"""
-    
+
     primary_data = ("Title", "Author")
     secondaries = ("WM/AlbumTitle", "WM/AlbumArtist", "WM/Year", "WM/Genre")
-    
+
     def save_tag(self, window):
         """Updates the tag with the GUI data."""
-         
+
         tag = self.tag
-        tb = self.tag_frame.tb
-         
+        tb = self.tag_frame.text_buffer
+
         for key in self.text_set:
             try:
                 del tag[key]
@@ -131,7 +134,7 @@ class WMATagger(MutagenTagger):
                     del tag[each[0]]
                 except KeyError:
                     pass
-                 
+
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
         for line in lines:
             try:
@@ -151,15 +154,15 @@ class WMATagger(MutagenTagger):
                         except KeyError:
                             print("Unacceptable key", key)
         try:
-            tag.save() 
+            tag.save()
         except mutagen.MutagenError as e:
             write_error_dialog(e, window)
-    
+
     def load_tag(self):
         """(re)Writes the tag data to the GUI."""
-        
+
         tag = self.tag
-        
+
         for each in self.primary_line:
             try:
                 data = tag[each[0]]
@@ -180,9 +183,9 @@ class WMATagger(MutagenTagger):
                 values = tag[key]
                 for val in values:
                     additional.append(f"{key}={val}")
-        
-        self.tag_frame.tb.set_text("\n".join(additional))
-    
+
+        self.tag_frame.text_buffer.set_text("\n".join(additional))
+
     def __init__(self, pathname):
         MutagenTagger.__init__(self, pathname)
         try:
@@ -193,7 +196,7 @@ class WMATagger(MutagenTagger):
             print("Not a real wma/asf file apparently.")
             self.tag = None
             return
-            
+
         hbox = Gtk.HBox()
         hbox.set_border_width(5)
         hbox.set_spacing(8)
@@ -202,11 +205,11 @@ class WMATagger(MutagenTagger):
         hbox.pack_start(vbox_text, False, False, 0)
         vbox_entry = Gtk.VBox()
         hbox.pack_start(vbox_entry, True, True, 0)
-        
+
         self.primary_line = []
         for text, entry in ((x, Gtk.Entry()) for x in self.primary_data):
             self.primary_line.append((text, entry))
-            vbox_text.add(LeftLabel(text))
+            vbox_text.add(left_label(text))
             vbox_entry.add(entry)
         hbox.show_all()
 
@@ -226,59 +229,59 @@ class WMATagger(MutagenTagger):
 
 class ID3Tagger(MutagenTagger):
     """ID3 tagging with Mutagen."""
-    
+
     primary_data = (("TIT2", _('title')), ("TPE1", _('artist')),
                          ("TALB", _('album')), ("TRCK", _('track/total')),
                          ("TCON", _('genre')), ("TDRC", _('record date')))
-    
+
     def save_tag(self, window):
         """Updates the tag with the GUI data."""
-        
+
         tag = self.tag
-        
+
         # Remove all text tags.
         for fid in [fid for fid in tag if fid[0] == 'T']:
             del tag[fid]
-    
+
         # Add the primary tags.
         for fid, entry in self.primary_line:
             text = entry.get_text().strip()
             if text:
                 frame = getattr(id3, fid)
                 tag[fid] = frame(3, [text])
- 
+
         # Add the freeform text tags.
-        tb = self.tag_frame.tb
+        tb = self.tag_frame.text_buffer
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
-             
+
         for line in lines:
             try:
                 fid, val = line.split(":", 1)
-            
+
             except ValueError:
                 continue
-            
+
             fid = fid.strip()
             val = val.strip()
-            
+
             try:
                 frame = id3.Frames[fid]
             except NameError:
                 continue
- 
+
             if not issubclass(frame, id3.TextFrame):
                 continue
- 
+
             if frame is id3.TXXX:
                 try:
                     key, val = val.split(u"=", 1)
-                
+
                 except ValueError:
                     continue
-                
+
                 f = frame(3, key.strip(), [val.strip()])
                 tag[f.HashKey] = f
-                
+
             else:
                 try:
                     val_list = tag[fid].text
@@ -288,17 +291,17 @@ class ID3Tagger(MutagenTagger):
                     val_list.append(val)
 
         try:
-            tag.save() 
+            tag.save()
         except mutagen.MutagenError as e:
             write_error_dialog(e, window)
-           
-                
+
+
     def load_tag(self):
         """(re)Writes the tag data to the GUI."""
-        
+
         additional = []
         done = []
-        
+
         for fid, entry in self.primary_line:
             try:
                 frame = self.tag[fid]
@@ -312,18 +315,18 @@ class ID3Tagger(MutagenTagger):
                         additional.append(f"{fid}:{each}")
             except KeyError:
                 entry.set_text("")
-            
+
             done.append(fid)
-                
+
         for fid, frame in self.tag.items():
             if fid[0] == "T" and fid not in done:
                 sep = "=" if fid.startswith("TXXX:") else ":"
                 for text in frame.text:
                     additional.append(f"{fid}{sep}"
                                       f"{text if type(text) is str else text.text}")
-                
-        self.tag_frame.tb.set_text("\n".join(additional))
-        
+
+        self.tag_frame.text_buffer.set_text("\n".join(additional))
+
     def __init__(self, pathname, force=False):
         MutagenTagger.__init__(self, pathname)
         if force:
@@ -347,28 +350,24 @@ class ID3Tagger(MutagenTagger):
             except mutagen.id3.error:
                 self.tag = None
                 return
-            
-        hbox = Gtk.HBox()
-        hbox.set_border_width(5)
-        hbox.set_spacing(8)
-        self.pack_start(hbox, False, False, 0)
-        vbox_frame = Gtk.VBox()
-        hbox.pack_start(vbox_frame, False, False, 0)
-        vbox_text = Gtk.VBox()
-        hbox.pack_start(vbox_text, False, False, 0)
-        vbox_entry = Gtk.VBox()
-        hbox.pack_start(vbox_entry, True, True, 0)
-        
+
+        grid = Gtk.Grid()
+        grid.set_border_width(5)
+        grid.set_column_spacing(8)
+        self.pack_start(grid, False, False, 0)
+
         self.primary_line = []
-        for frame, text, entry in (
+        for i, (frame, text, entry) in enumerate(
                             (x, y, Gtk.Entry()) for x, y in self.primary_data):
             self.primary_line.append((frame, entry))
-            vbox_frame.add(LeftLabel(frame))
-            vbox_text.add(RightLabel(text))
-            vbox_entry.add(entry)
-        hbox.show_all()
-        
+            grid.attach(mono_label(frame), 0, i, 1, 1)
+            grid.attach(right_label(text), 1, i, 1, 1)
+            grid.attach(entry, 2, i, 1, 1)
+            entry.set_hexpand(True)
+        grid.show_all()
+
         self.tag_frame = FreeTagFrame()
+        self.tag_frame.set_vexpand(True)
         set_tip(self.tag_frame, _('Add any other ID3 text frames here.\ne.g. '
         'TIT2:Alternate Title\nThis will be appended onto the main TIT2 tag.'
         '\n\nEnter user defined text frames like this:\nTXXX:foo=bar\n\n'
@@ -382,14 +381,14 @@ class ID3Tagger(MutagenTagger):
 
 class MP4Tagger(MutagenTagger):
     """MP4 tagging with Mutagen."""
-    
+
     primary_data = (("\xa9nam", _('Title')), ("\xa9ART", _('Artist')),
                          ("\xa9alb", _('Album')), ("trkn", _('Track')),
                          ("\xa9gen", _('Genre')), ("\xa9day", _('Year')))
-    
+
     def save_tag(self, window):
         """Updates the tag with the GUI data."""
-        
+
         tag = self.tag
         for fid, entry in self.primary_line:
             text = entry.get_text().strip()
@@ -424,12 +423,12 @@ class MP4Tagger(MutagenTagger):
         except mutagen.MutagenError as e:
             write_error_dialog(e, window)
 
-                
+
     def load_tag(self):
         """(re)Writes the tag data to the GUI."""
-        
+
         additional = []
-        
+
         for fid, entry in self.primary_line:
             try:
                 frame = self.tag[fid][0]
@@ -454,7 +453,7 @@ class MP4Tagger(MutagenTagger):
             print("Not a real mp4 file apparently.")
             self.tag = None
             return
-            
+
         hbox = Gtk.HBox()
         hbox.set_border_width(5)
         hbox.set_spacing(8)
@@ -463,32 +462,32 @@ class MP4Tagger(MutagenTagger):
         hbox.pack_start(vbox_text, False, False, 0)
         vbox_entry = Gtk.VBox()
         hbox.pack_start(vbox_entry, True, True, 0)
-        
+
         self.primary_line = []
         for frame, text, entry in (
                             (x, y, Gtk.Entry()) for x, y in self.primary_data):
             self.primary_line.append((frame, entry))
-            vbox_text.add(LeftLabel(text))
+            vbox_text.add(left_label(text))
             vbox_entry.add(entry)
         hbox.show_all()
 
 
 class NativeTagger(MutagenTagger):
     """Native format tagging with Mutagen. Mostly FLAC and Ogg."""
-    
+
     blacklist = "coverart", "metadata_block_picture"
-    
+
     def save_tag(self, window):
         """Updates the tag with the GUI data."""
-        
+
         tag = self.tag
 
         for key in [key for key in tag if key not in self.blacklist]:
             del tag[key]
-                
-        tb = self.tag_frame.tb
+
+        tb = self.tag_frame.text_buffer
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
-        
+
         for line in lines:
             try:
                 key, val = line.split("=", 1)
@@ -505,15 +504,15 @@ class NativeTagger(MutagenTagger):
                             tag[key] = [val]
                         except KeyError:
                             print("Unacceptable key", key)
-    
+
         try:
-            tag.save() 
+            tag.save()
         except mutagen.MutagenError as e:
             write_error_dialog(e, window)
 
     def load_tag(self):
         """(re)Writes the tag data to the GUI."""
-        
+
         tag = self.tag
         lines = []
         primaries = "title", "artist", "author", "album",\
@@ -531,9 +530,9 @@ class NativeTagger(MutagenTagger):
             if key not in primaries and key not in self.blacklist:
                 for val in values:
                     lines.append(f"{key}={val}")
-                
-        self.tag_frame.tb.set_text("\n".join(lines))
-    
+
+        self.tag_frame.text_buffer.set_text("\n".join(lines))
+
 
     def __init__(self, pathname, ext):
         MutagenTagger.__init__(self, pathname)
@@ -542,8 +541,9 @@ class NativeTagger(MutagenTagger):
             # MP3 and APEv2 have their own specialised tagger.
             self.tag = None
             return
-        
+
         self.tag_frame = FreeTagFrame()
+        self.tag_frame.set_vexpand(True)
         self.add(self.tag_frame)
         self.tag_frame.show()
 
@@ -551,20 +551,20 @@ class NativeTagger(MutagenTagger):
 
 class ApeTagger(MutagenTagger):
     """APEv2 tagging with Mutagen."""
-    
+
     opener = {"ape": MonkeysAudio, "mpc": Musepack }
-    
+
     def save_tag(self, window):
         """Updates the tag with the GUI data."""
-        
+
         tag = self.tag
 
         for k in [k for k, v in tag.items() if isinstance(v, APETextValue)]:
             del tag[k]
-                
-        tb = self.tag_frame.tb
+
+        tb = self.tag_frame.text_buffer
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
-        
+
         for line in lines:
             try:
                 key, val = line.split("=", 1)
@@ -581,20 +581,20 @@ class ApeTagger(MutagenTagger):
                             tag[key] = APETextValue(val, 0)
                         except KeyError:
                             print("Unacceptable key", key)
-    
+
         try:
-            tag.save() 
+            tag.save()
         except mutagen.MutagenError as e:
             write_error_dialog(e, window)
-    
+
     def load_tag(self):
         """(re)Writes the tag data to the GUI."""
-        
+
         tag = self.tag
         lines = []
         primaries = "TITLE", "ARTIST", "AUTHOR", "ALBUM",\
                                   "TRACKNUMBER", "TRACKTOTAL", "GENRE", "DATE"
-        
+
         for key in primaries:
             try:
                 values = tag[key]
@@ -608,12 +608,12 @@ class ApeTagger(MutagenTagger):
             if key not in primaries and isinstance(values, APETextValue):
                 for val in values:
                     lines.append(f"{key}={val}")
-                
-        self.tag_frame.tb.set_text("\n".join(lines))
+
+        self.tag_frame.text_buffer.set_text("\n".join(lines))
 
     def __init__(self, pathname, extension):
         MutagenTagger.__init__(self, pathname)
-        
+
         try:
             self.tag = self.opener[extension](pathname)
         except KeyError:
@@ -636,8 +636,9 @@ class ApeTagger(MutagenTagger):
                 print("ape tag found on native format")
             else:
                 print("no existing ape tags found")
-            
+
         self.tag_frame = FreeTagFrame()
+        self.tag_frame.set_vexpand(True)
         self.add(self.tag_frame)
         self.tag_frame.show()
 
@@ -651,12 +652,12 @@ class MutagenGUI:
     def destroy_and_quit(self, widget, data = None):
         Gtk.main_quit()
         sys.exit(0)
-    
-    def update_playlists(self, pathname, idjcroot):
+
+    def update_playlists(self, _, pathname, idjcroot):
         newplaylistdata = idjcroot.player_left.get_media_metadata(pathname)
         idjcroot.player_left.update_playlist(newplaylistdata)
         idjcroot.player_right.update_playlist(newplaylistdata)
-    
+
     @staticmethod
     def is_supported(pathname):
         supported = [ "mp2", "mp3", "ogg", "oga" ]
@@ -675,29 +676,30 @@ class MutagenGUI:
             return False
         else:
             return extension
-    
+
     def __init__(self, pathname, encoding, idjcroot = None):
         if not pathname:
             print("Tagger not supplied any pathname.")
             return
-        
+
         extension = self.is_supported(pathname)
         if extension == False:
             print("Tagger file extension", extension, "not supported.")
             return
-        
+
         self.window = Gtk.Window()
+        self.window.set_border_width(4)
         if idjcroot is not None:
             idjcroot.window_group.add_window(self.window)
         self.window.set_size_request(550, 450)
         # TC: Window title.
         self.window.set_title(_('IDJC Tagger') + pm.title_extra)
         self.window.set_destroy_with_parent(True)
-        self.window.set_border_width(9)
         self.window.set_resizable(True)
         if idjcroot == None:
             self.window.connect("destroy", self.destroy_and_quit)
         vbox = Gtk.VBox()
+        vbox.set_spacing(3)
         self.window.add(vbox)
         vbox.show()
         label = Gtk.Label()
@@ -706,36 +708,44 @@ class MutagenGUI:
                              pathname)[1]) + "</b>")
         vbox.pack_start(label, False, False, 6)
         label.show()
-        
+
         hbox = Gtk.HBox()
-        hbox.set_border_width(2)
-        apply_button = Gtk.Button.new_from_stock(Gtk.STOCK_APPLY)
-        if idjcroot is not None:
-            apply_button.connect_object_after("clicked", self.update_playlists,
-                                                            pathname, idjcroot)
-        hbox.pack_end(apply_button, False, False, 0)
-        apply_button.show()
-        close_button = Gtk.Button.new_from_stock(Gtk.STOCK_CLOSE)
+        bb = Gtk.ButtonBox()
+        bb.set_spacing(3)
+        bb.set_layout(Gtk.ButtonBoxStyle.END)
+        hbox.pack_end(bb, True)
+        bb.show()
+
+        close_button = Gtk.Button.new_with_label(_("Close"))
         close_button.connect_object("clicked", Gtk.Window.destroy, self.window)
-        hbox.pack_end(close_button, False, False, 10)
+        bb.add(close_button)
         close_button.show()
-        reload_button = Gtk.Button.new_from_stock(Gtk.STOCK_REVERT_TO_SAVED)
-        hbox.pack_start(reload_button, False, False, 10)
+
+        apply_button = Gtk.Button.new_with_label(_("Apply"))
+        if idjcroot is not None:
+            apply_button.connect_after("clicked", self.update_playlists,
+                                                            pathname, idjcroot)
+        bb.add(apply_button)
+        apply_button.show()
+
+        reload_button = Gtk.Button.new_from_icon_name("edit-undo-symbolic",
+                                                      Gtk.IconSize.BUTTON)
+        # reload_button.set_label(_("Undo"))
+        hbox.pack_start(reload_button, False, False, 0)
         reload_button.show()
         vbox.pack_end(hbox, False, False, 0)
         hbox.show()
         hbox = Gtk.HBox()
         vbox.pack_end(hbox, False, False, 2)
         hbox.show()
-        
+
         notebook = Gtk.Notebook()
-        notebook.set_border_width(2)
         vbox.pack_start(notebook, True, True, 0)
         notebook.show()
-        
+
         try:
             self.ape = ApeTagger(pathname, extension)
-            
+
             if extension in ("mp3", "aac"):
                 self.id3 = ID3Tagger(pathname, True)
                 self.native = None
@@ -750,31 +760,31 @@ class MutagenGUI:
                     self.native = None
                 else:
                     self.native = NativeTagger(pathname, ext=extension)
-            
+
             if self.id3 is not None and self.id3.tag is not None:
                 reload_button.connect("clicked", lambda x: self.id3.load_tag())
                 apply_button.connect("clicked", lambda x: self.id3.save_tag(self.window))
                 label = Gtk.Label("ID3")
                 notebook.append_page(self.id3, label)
                 self.id3.show()
-            
+
             if self.ape is not None and self.ape.tag is not None:
                 reload_button.connect("clicked", lambda x: self.ape.load_tag())
                 apply_button.connect("clicked", lambda x: self.ape.save_tag(self.window))
                 label = Gtk.Label("APE v2")
                 notebook.append_page(self.ape, label)
-                self.ape.show() 
-            
+                self.ape.show()
+
             if self.native is not None and self.native.tag is not None:
                 reload_button.connect("clicked",
                                             lambda x: self.native.load_tag())
                 apply_button.connect("clicked",
                                             lambda x: self.native.save_tag(self.window))
-                label = Gtk.Label(_('Native') + " (" + self.ext2name[
+                label = Gtk.Label.new(_('Native') + " (" + self.ext2name[
                                                             extension] + ")")
                 notebook.append_page(self.native, label)
                 self.native.show()
-            
+
             reload_button.clicked()
 
             apply_button.connect_object_after("clicked",

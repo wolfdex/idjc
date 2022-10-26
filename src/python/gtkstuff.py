@@ -18,6 +18,7 @@
 import os
 import json
 import gettext
+import threading
 from abc import ABCMeta, abstractmethod
 from functools import wraps
 from contextlib import contextmanager
@@ -38,58 +39,93 @@ t = gettext.translation(FGlobs.package_name, FGlobs.localedir, fallback=True)
 _ = t.gettext
 
 
-def threadslock(inner):
-    """Function decorator to safely apply gtk/gdk thread lock to callbacks.
+class TimeUnitEntry(Gtk.SpinButton):
+    """Widget for entering hours, minutes, or seconds."""
 
-    Needed to lock non gtk/gdk callbacks originating in the wider glib main
-    loop whenever they may call gtk or gdk code, read properties etc.
+    def __init__(self, upper):
+        adj = Gtk.Adjustment(upper=upper, step_increment=1.0)
+        Gtk.SpinButton.__init__(self, adjustment=adj)
+        self.set_orientation(Gtk.Orientation.VERTICAL)
+        self.set_wrap(True)
+        self.set_input_purpose(Gtk.InputPurpose.DIGITS)
+        self.connect("output", self._on_output)
 
-    Useful for callbacks that mainly manipulate Gtk.
-    """
+    def _on_output(self, _):
+        self.set_text(f"{self.get_value():02}")
+        return True
 
-    @wraps(inner)
-    def wrapper(*args, **kwargs):
-        Gdk.threads_enter()
-        try:
-            if Gtk.main_level():
-                return inner(*args, **kwargs)
+    def get_value(self):
+        return self.get_value_as_int()
+
+
+class TimeHMSEntry(Gtk.Grid):
+    """Widget for entering the time in hours, minutes, and seconds."""
+
+    def __init__(self):
+        self._notify_enabled = True
+        Gtk.Grid.__init__(self)
+        self.set_column_spacing(3)
+        for i, (name, upper) in enumerate((("hours", 23),
+                                         ("minutes", 59),
+                                         ("seconds", 59))):
+            time_unit_entry = TimeUnitEntry(upper)
+            self.attach(time_unit_entry, i, 0, 1, 1)
+            setattr(self, name, time_unit_entry)
+            time_unit_entry.connect("value-changed", self._on_value_changed)
+
+        for side in Gtk.PositionType.LEFT, Gtk.PositionType.RIGHT:
+            self.insert_next_to(self.minutes, side)
+            self.attach_next_to(Gtk.Label.new(":"), self.minutes, side, 1, 1)
+
+        self.seconds.connect("wrapped", self._on_wrap, self.minutes)
+        self.minutes.connect("wrapped", self._on_wrap, self.hours)
+
+        self.show_all()
+
+    def _on_wrap(self, wrapped_widget, affected_widget):
+        wrapped = wrapped_widget.get_adjustment()
+        affected = affected_widget.get_adjustment()
+
+        if wrapped.props.value == 0:
+            if affected.props.value == affected.props.upper:
+                affected.props.value = 0.0
+                affected_widget.emit("wrapped")
             else:
-                # Cancel timeouts and idle functions.
-                print("callback cancelled")
-                return False
+                affected.props.value += 1.0
+        else:
+            if affected.props.value == 0.0:
+                affected.props.value = affected.props.upper
+                affected_widget.emit("wrapped")
+            else:
+                affected.props.value -= 1.0
+
+    def _on_value_changed(self, *_):
+        if self._notify_enabled:
+            self.notify("value")
+
+    @GObject.Property(type=int)
+    def value(self):
+        return self.get_value()
+
+    @value.setter
+    def value(self, value):
+        self.set_value(value)
+
+    def get_value(self):
+        """Number of seconds since midnight."""
+
+        return self.hours.get_value() * 3600 + \
+               self.minutes.get_value() * 60 + \
+               self.seconds.get_value()
+
+    def set_value(self, time_in_seconds):
+        try:
+            self._notify_enabled = False
+            time_in_seconds = int(time_in_seconds) % 86400  # Today only.
+            m, self.seconds.props.value = divmod(time_in_seconds, 60)
+            self.hours.props.value, self.minutes.props.value = divmod(m, 60)
         finally:
-            Gdk.threads_leave()
-    return wrapper
-
-
-@contextmanager
-def gdklock():
-    """Like threadslock but for 'with' code blocks that manipulate Gtk."""
-
-    Gdk.threads_enter()
-    yield
-    Gdk.threads_leave()
-
-
-@contextmanager
-def gdkunlock():
-    """Like gdklock but unlock instead.
-
-    Useful for calling threadslock functions when already locked.
-    """
-
-    Gdk.threads_leave()
-    yield
-    Gdk.threads_enter()
-
-
-@contextmanager
-def nullcm():
-    """Null context.
-
-    eg. with (gdklock if lock_f else nullcm)():"""
-
-    yield
+            self._notify_enabled = True
 
 
 class RepeatButton(Gtk.Button):
@@ -119,10 +155,9 @@ class RepeatButton(Gtk.Button):
         if self.pressed == False:
             return False
 
-        with gdklock():
-            if adjust:
-                self.source_id = GLib.timeout_add(adjust, self.delay, None)
-            self.emit("clicked")
+        if adjust:
+            self.source_id = GLib.timeout_add(adjust, self.delay, None)
+        self.emit("clicked")
 
         return True if adjust is None else False
 
@@ -149,12 +184,12 @@ class TextSpinButton(Gtk.Frame):
         hbox.pack_start(self._entry, True, True, 0)
         button_box = Gtk.Box()
         hbox.pack_start(button_box, False, False, 0)
-        self._prev = RepeatButton.new_from_icon_name("go-previous", Gtk.IconSize.MENU)
+        self._prev = RepeatButton.new_from_icon_name("go-previous-symbolic", Gtk.IconSize.MENU)
         self._prev.set_relief(Gtk.ReliefStyle.NONE)
         self._prev.set_can_focus(False)
         self._prev.connect("clicked", self._on_click)
         button_box.pack_start(self._prev, True, True, 0)
-        self._next = RepeatButton.new_from_icon_name("go-next", Gtk.IconSize.MENU)
+        self._next = RepeatButton.new_from_icon_name("go-next-symbolic", Gtk.IconSize.MENU)
         self._next.set_relief(Gtk.ReliefStyle.NONE)
         self._next.set_can_focus(False)
         self._next.connect("clicked", self._on_click)
@@ -336,29 +371,27 @@ class TextSpinButton(Gtk.Frame):
 
 
 def repair_default_arguments():
-    GTK_VBOX = Gtk.VBox
-    class VBox(GTK_VBOX):
-        def __init__(self, homogenous=False, spacing=0):
-            GTK_VBOX.__init__(self, homogenous, spacing)
+    class VBox(Gtk.Box):
+        def __init__(self, homogeneous=False, spacing=0):
+            Gtk.Box.__init__(self, homogeneous=homogeneous, spacing=spacing, orientation=Gtk.Orientation.VERTICAL)
 
         def pack_start(self, child, expand=True, fill=True, padding=0):
-            GTK_VBOX.pack_start(self, child, expand, fill, padding)
+            Gtk.Box.pack_start(self, child, expand, fill, padding)
 
         def pack_end(self, child, expand=True, fill=True, padding=0):
-            GTK_VBOX.pack_end(self, child, expand, fill, padding)
+            Gtk.Box.pack_end(self, child, expand, fill, padding)
     Gtk.VBox = VBox
 
 
-    GTK_HBOX = Gtk.HBox
-    class HBox(GTK_HBOX):
-        def __init__(self, homogenous=False, spacing=0):
-            GTK_HBOX.__init__(self, homogenous, spacing)
+    class HBox(Gtk.Box):
+        def __init__(self, homogeneous=False, spacing=0):
+            Gtk.Box.__init__(self, homogeneous=homogeneous, spacing=spacing, orientation=Gtk.Orientation.HORIZONTAL)
 
         def pack_start(self, child, expand=True, fill=True, padding=0):
-            GTK_HBOX.pack_start(self, child, expand, fill, padding)
+            Gtk.Box.pack_start(self, child, expand, fill, padding)
 
         def pack_end(self, child, expand=True, fill=True, padding=0):
-            GTK_HBOX.pack_end(self, child, expand, fill, padding)
+            Gtk.Box.pack_end(self, child, expand, fill, padding)
     Gtk.HBox = HBox
 
 repair_default_arguments()
@@ -404,9 +437,9 @@ class CellRendererLED(Gtk.CellRendererPixbuf):
 
     __gproperties__ = {
             "active" : (GObject.TYPE_INT, "active", "active",
-                            0, 1, 0, GObject.PARAM_WRITABLE),
+                            0, 1, 0, GObject.ParamFlags.WRITABLE),
             "color" :  (GObject.TYPE_STRING, "color", "color",
-                            "clear", GObject.PARAM_WRITABLE)
+                            "clear", GObject.ParamFlags.WRITABLE)
     }
 
     def __init__(self, size=10, actives=("clear", "green")):
@@ -431,7 +464,7 @@ class CellRendererTime(Gtk.CellRendererText):
 
     __gproperties__ = {
             "time" : (GObject.TYPE_INT, "time", "time",
-                         0, 1000000000, 0, GObject.PARAM_WRITABLE)
+                         0, 1000000000, 0, GObject.ParamFlags.WRITABLE)
     }
 
 
@@ -451,7 +484,7 @@ class CellRendererTime(Gtk.CellRendererText):
 
 
 class StandardDialog(Gtk.Dialog):
-    def __init__(self, title, message, stock_item, label_width, modal, markup):
+    def __init__(self, title, message, icon_name, label_width, modal, markup):
         Gtk.Dialog.__init__(self)
         self.set_border_width(6)
         self.get_child().set_spacing(12)
@@ -462,51 +495,44 @@ class StandardDialog(Gtk.Dialog):
         hbox = Gtk.HBox()
         hbox.set_spacing(12)
         hbox.set_border_width(6)
-        image = Gtk.Image.new_from_stock(stock_item,
-                                                        Gtk.IconSize.DIALOG)
-        image.set_alignment(0.0, 0.0)
+        image = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DIALOG)
+        image.set_valign(Gtk.Align.START)
         hbox.pack_start(image, False)
         vbox = Gtk.VBox()
         hbox.pack_start(vbox)
         for each in message.split("\n"):
-            label = Gtk.Label(each)
+            label = Gtk.Label.new(each)
             label.set_use_markup(markup)
-            label.set_alignment(0.0, 0.0)
+            label.set_xalign(0.0)
+            label.set_yalign(0.0)
             label.set_size_request(label_width, -1)
             label.set_line_wrap(True)
             vbox.pack_start(label)
         ca = self.get_content_area()
         ca.add(hbox)
-        aa = self.get_action_area()
-        aa.set_spacing(6)
 
 
 class ConfirmationDialog(StandardDialog):
-    """This needs to be pulled out since it's generic."""
-
     def __init__(self, title, message, label_width=300, modal=True,
-            markup=False, action=Gtk.STOCK_DELETE, inaction=Gtk.STOCK_CANCEL):
+            markup=False, action=_("OK"), inaction=_("Cancel")):
         StandardDialog.__init__(self, title, message,
-                        Gtk.STOCK_DIALOG_WARNING, label_width, modal, markup)
-        aa = self.get_action_area()
-        cancel = Gtk.Button(stock=inaction)
+                        "dialog-question", label_width, modal, markup)
+        cancel = Gtk.Button(label=inaction)
         cancel.connect("clicked", lambda w: self.destroy())
-        aa.pack_start(cancel, expand=True, fill=True, padding=0)
-        self.ok = Gtk.Button(stock=action)
+        self.add_action_widget(cancel, Gtk.ResponseType.NONE)
+        self.ok = Gtk.Button(label=action)
         self.ok.connect_after("clicked", lambda w: self.destroy())
-        aa.pack_start(self.ok, expand=True, fill=True, padding=0)
+        self.add_action_widget(self.ok, Gtk.ResponseType.NONE)
 
 
 class ErrorMessageDialog(StandardDialog):
-    """This needs to be pulled out since it's generic."""
-
     def __init__(self, title, message, label_width=300, modal=True,
                                                                 markup=False):
         StandardDialog.__init__(self, title, message,
-                            Gtk.STOCK_DIALOG_ERROR, label_width, modal, markup)
-        b = Gtk.Button(stock=Gtk.STOCK_CLOSE)
+                "dialog-error-symbolic", label_width, modal, markup)
+        b = Gtk.Button.new_with_label(_("Close"))
         b.connect("clicked", lambda w: self.destroy())
-        self.get_action_area().add(b)
+        self.add_action_widget(b, Gtk.ResponseType.NONE)
 
 
 class DefaultEntry(Gtk.Entry):
@@ -618,7 +644,7 @@ class WindowSizeTracker(object):
         self._window.unmaximize()
         self._window.resize(self._x, self._y)
         if self._max:
-            idle_add(threadslock(self._window.maximize))
+            idle_add(self._window.maximize)
 
     def _on_configure_event(self, widget, event):
         if self._is_tracking and not self._max:
@@ -638,7 +664,7 @@ class IconChooserButton(Gtk.Button):
     """
 
     __gsignals__ = {
-            "filename-changed" : (GObject.SIGNAL_RUN_LAST, GObject.TYPE_NONE,
+            "filename-changed" : (GObject.SignalFlags.RUN_LAST, GObject.TYPE_NONE,
                                                     (GObject.TYPE_PYOBJECT,)),
     }
 
@@ -651,13 +677,14 @@ class IconChooserButton(Gtk.Button):
         image = Gtk.Image()
         hbox.pack_start(image, False, padding=1)
         label = Gtk.Label()
-        label.set_alignment(0, 0.5)
+        label.set_xalign(0)
+        label.set_yalign(0.5)
         label.set_ellipsize(Pango.EllipsizeMode.END)
         hbox.pack_start(label)
 
         vsep = Gtk.VSeparator()
         hbox.pack_start(vsep, False)
-        rightmost_icon = Gtk.Image.new_from_stock(Gtk.STOCK_OPEN,
+        rightmost_icon = Gtk.Image.new_from_icon_name("document-open-symbolic",
                                                             Gtk.IconSize.MENU)
         hbox.pack_start(rightmost_icon, False)
         self.add(hbox)
@@ -707,8 +734,8 @@ class IconChooserButton(Gtk.Button):
 
 
 class IconPreviewFileChooserDialog(Gtk.FileChooserDialog):
-    def __init__(self, *args, **kwds):
-        Gtk.FileChooserDialog.__init__(self, *args, **kwds)
+    def __init__(self, **kwds):
+        Gtk.FileChooserDialog.__init__(self, **kwds)
         filefilter = Gtk.FileFilter()
         # TC: the file filter text of a file chooser dialog.
         filefilter.set_name(_("Supported Image Formats"))
@@ -776,7 +803,7 @@ class LabelSubst(Gtk.Frame):
                 new_text = new_text.strip()
                 if new_text:
                     new_text = " %s " % new_text
-                widget.set_label(new_text or None)
+                widget.set_label(new_text)
             widget.set_text = set_text
 
         entry.connect("changed", self.cb_entry_changed, widget, use_supplied)
@@ -812,7 +839,7 @@ class FolderChooserButton(Gtk.Button):
     mode.
     """
 
-    __gsignals__ = { 'current-folder-changed' : (GObject.SIGNAL_RUN_FIRST,
+    __gsignals__ = { 'current-folder-changed' : (GObject.SignalFlags.RUN_FIRST,
         GObject.TYPE_NONE, (GObject.TYPE_STRING,))
     }
 
@@ -823,11 +850,12 @@ class FolderChooserButton(Gtk.Button):
         hbox = Gtk.HBox()
         hbox.set_spacing(3)
         self.add(hbox)
-        self._icon = Gtk.Image.new_from_stock(Gtk.STOCK_DIRECTORY, Gtk.IconSize.MENU)
+        self._icon = Gtk.Image.new_from_icon_name("folder-symbolic", Gtk.IconSize.BUTTON)
         hbox.pack_start(self._icon, False)
         # TC: FolderChooserButton text for null -- no directory is set.
-        self._label = Gtk.Label(_("(None)"))
-        self._label.set_alignment(0.0, 0.5)
+        self._label = Gtk.Label.new(_("(None)"))
+        self._label.set_xalign(0.0)
+        self._label.set_yalign(0.5)
         self._label.set_ellipsize(Pango.EllipsizeMode.END)
         hbox.pack_start(self._label)
         self._label.show()
@@ -912,28 +940,40 @@ def _source_wrapper(data):
             return ret
         data[0] = False
 
-
 def source_remove(data):
     if data[0]:
         GLib.source_remove(data[4])
     data[0] = False
-
 
 def timeout_add(interval, callback, *args, **kwargs):
     data = [True, callback, args, kwargs]
     data.append(GLib.timeout_add(interval, _source_wrapper, data))
     return data
 
-
 def timeout_add_seconds(interval, callback, *args, **kwargs):
     data = [True, callback, args, kwargs]
     data.append(GLib.timeout_add_seconds(interval, _source_wrapper, data))
     return data
-
 
 def idle_add(callback, *args, **kwargs):
     data = [True, callback, args, kwargs]
     data.append(GLib.idle_add(_source_wrapper, data))
     return data
 
+def idle_wait(func):
+    """Wait on the completion of an idle function.
 
+    Intended to be run from a thread to provide GTK functionality.
+    Running this from GTK main context will cause deadlock."""
+
+    semaphore = threading.Semaphore()
+    semaphore.acquire()
+    def inner(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        finally:
+            semaphore.release()
+
+    idle_add(inner)
+    semaphore.acquire()
+    semaphore.release()

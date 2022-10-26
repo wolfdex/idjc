@@ -74,13 +74,13 @@ class FGlobs(metaclass=FixedAttributes):
     speexenabled = @HAVE_SPEEX@
     twolameenabled = @HAVE_TWOLAME@
     shouttlsenabled = @HAVE_SHOUT_TLS@
-    
+
     have_libmp3lame, libmp3lame_filename = lib_probe(@DYN_LAME@,
                                 "libmp3lame liblame", """@DYLIB_EXT@""")
-    
+
     have_libmpg123, libmpg123_filename = lib_probe(@DYN_MPG123@,
                                         "libmpg123", """@DYLIB_EXT@""")
-        
+
     package_name = """@PACKAGE_NAME@"""
     package_version = """@PACKAGE_VERSION@"""
     backend = PathStr("""${pkglibdir}""") / ("idjc" + """@DYLIB_EXT@""")
@@ -92,7 +92,7 @@ _ = gettext.translation(FGlobs.package_name, FGlobs.localedir,
 
 class PGlobs(metaclass = PolicedAttributes):
     """Values which cannot be changed once they have been read."""
-      
+
     config_dir = PathStr(GLib.get_user_config_dir()) / FGlobs.package_name
     #config_dir = PathStr(os.path.expanduser("~")) / ("." + FGlobs.package_name)
     profile_dir = config_dir / "profiles"
@@ -100,7 +100,7 @@ class PGlobs(metaclass = PolicedAttributes):
     dbus_objects_basename = "/net/sf/" + FGlobs.package_name
     app_shortform = "IDJC"
     app_longform = "Internet DJ Console"
-    default_icon = FGlobs.pkgdatadir / "icon.png"
+    default_icon = FGlobs.pkgdatadir / "icon.svg"
     autoload_profile_pathname = config_dir / "autoload-profile"
     copyright = _("Copyright 2005-%s Stephen Fairchild and others."
                                                     ) % """@COPYRIGHT_YEAR@"""
