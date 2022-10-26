@@ -33,7 +33,7 @@
 
 struct avcodecdecode_vars
     {
-    AVCodec *codec;
+    const AVCodec *codec;
     AVPacket pkt;
     AVPacket pktcopy;
     AVCodecContext *c;

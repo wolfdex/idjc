@@ -3832,8 +3832,9 @@ class IDJC_Media_Player(dbus.service.Object):
         hbox.set_border_width(10)
         hbox.set_spacing(5)
         frame.add(hbox)
-        image = Gtk.Image()
-        image.set_from_file(FGlobs.pkgdatadir / "icon.png")
+        pb = GdkPixbuf.Pixbuf.new_from_file_at_size(FGlobs.pkgdatadir / "icon.svg",
+                                             100, 100)
+        image = Gtk.Image.new_from_pixbuf(pb)
         hbox.add(image)
         image.show()
         separator = Gtk.VSeparator()
@@ -3872,7 +3873,8 @@ class IDJC_Media_Player(dbus.service.Object):
                 vbox.add(label1)
                 label1.show()
                 if self.album:
-                    blank = Gtk.Label()
+                    blank = Gtk.Box()
+                    blank.set_size_request(-1, 5)
                     vbox.add(blank)
                     blank.show()
                 label2 = Gtk.Label.new(tracktitle)
@@ -3883,17 +3885,22 @@ class IDJC_Media_Player(dbus.service.Object):
                     label3 = Gtk.Label.new(_('From the album, %s') % self.album)
                     vbox.add(label3)
                     label3.show()
-                blank = Gtk.Label()
+                blank = Gtk.Box()
+                blank.set_size_request(-1, 5)
                 vbox.add(blank)
                 blank.show()
             else:
                 label3 = Gtk.Label.new(_('Total number of tracks %d') % trackscount)
+                label3.set_valign(Gtk.Align.CENTER)
+                label3.set_vexpand(True)
                 vbox.add(label3)
                 label3.show()
             try:
                 label4 = Gtk.Label.new(_('Total play duration %s') % hms)
-            except:
+            except AttributeError:
                 label4 = Gtk.Label.new(_('Total play duration %s'))
+            label4.set_valign(Gtk.Align.CENTER)
+            label4.set_vexpand(True)
             vbox.add(label4)
             label4.show()
         else:

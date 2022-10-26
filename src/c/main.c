@@ -54,7 +54,7 @@ static void alarm_handler(int sig)
 
     if (g.jack_timeout++ > 9)
         g.app_shutdown = TRUE;
-    
+
     if (g.has_head && g.main_timeout++ > 9)
         g.app_shutdown = TRUE;
 
@@ -91,12 +91,12 @@ static void session_callback(jack_session_event_t *event, void *arg)
         exit(5);
         }
     }
-    
+
 static int buffer_size_callback(jack_nframes_t n_frames, void *arg)
     {
     return mixer_new_buffer_size(n_frames);
     }
-    
+
 static void freewheel_callback(int starting, void *arg)
     {
     g.freewheel = starting;
@@ -116,10 +116,10 @@ static int main_process_audio(jack_nframes_t n_frames, void *arg)
     int rv;
 
     rv =  mixer_process_audio(n_frames, arg) || audio_feed_process_audio(n_frames, arg);
-    
+
     if (rv == 0)
         g.jack_timeout = 0;
-    
+
     return rv;
     }
 
@@ -153,7 +153,7 @@ static int backend_main()
     setlocale(LC_ALL, getenv("LC_ALL"));
     g.has_head = atoi(getenv("has_head"));
     signal(SIGALRM, alarm_handler);
-    
+
     /* Signal handling. */
     sig_init();
 
@@ -178,14 +178,6 @@ static int backend_main()
         fprintf(stderr, "pthread_mutex_init failed\n");
         exit(5);
         }
-#ifdef HAVE_AVCODEC_REGISTER_ALL
-    // kept for old ffmpeg compatibilty
-    avcodec_register_all();
-#endif
-#ifdef HAVE_AV_REGISTER_ALL
-    // kept for old ffmpeg compatibility
-    av_register_all();
-#endif
 #endif /* HAVE_LIBAV */
 
     alarm(3);
@@ -202,7 +194,7 @@ static int backend_main()
     /* Registration of JACK ports. */
     #define MK_AUDIO_INPUT(var, name) var = jack_port_register(g.client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
     #define MK_AUDIO_OUTPUT(var, name) var = jack_port_register(g.client, name, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
-    
+
         {
         struct jack_ports *p = &g.port;
 
@@ -284,7 +276,7 @@ static int backend_main()
                 exit(5);
                 }
             }
-            
+
         g.main_timeout = 0;
         }
 
@@ -293,7 +285,7 @@ static int backend_main()
     g.client = NULL;
 
     alarm(0);
-    
+
     if (buffer)
         free(buffer);
 
@@ -327,7 +319,7 @@ int init_backend(int *read_pipe, int *write_pipe)
         if ((g.in = fopen(ui2be, "r")) && (g.out = fopen(be2ui, "w")))
             {
             fputc('#', g.out);
-                
+
             int ret = backend_main();
             fclose(g.in);
             fclose(g.out);
@@ -339,13 +331,13 @@ int init_backend(int *read_pipe, int *write_pipe)
 
     *write_pipe = open(ui2be, O_WRONLY);
     *read_pipe = open(be2ui, O_RDONLY);
-    
+
     char buffer;
     if (read(*read_pipe, &buffer, 1) != 1)
         {
         fprintf(stderr, "init_backend: pipe failed\n");
         return -1;
         }
-    
+
     return (int)pid;
     }

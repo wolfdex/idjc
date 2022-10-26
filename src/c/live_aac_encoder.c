@@ -1,6 +1,6 @@
 /*
 #   live_aac_encoder.c: encode using libavformat
-#   Copyright (C) 2015 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#   Copyright (C) 2015-2022 Stephen Fairchild (s-fairchild@users.sf.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@
 #include <libavutil/opt.h>
 #include <libavutil/mathematics.h>
 #include <libavutil/timestamp.h>
+#include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
@@ -58,6 +59,7 @@ typedef struct State {
     uint8_t *buf;
     size_t buf_size;
     int sri;
+    AVPacket *pkt;
 } State;
 
 
@@ -70,13 +72,13 @@ static void avcodec_safe_close(AVCodecContext **c)
 }
 
 
-static AVCodec *add_stream(State *self, enum AVCodecID codec_id,
+static const AVCodec *add_stream(State *self, enum AVCodecID codec_id,
                            int profile, int br, int sr, int ch)
 {
-    AVCodec *codec;
     AVCodecContext *c;
+    const AVCodec *codec = avcodec_find_encoder(codec_id);
 
-    if (!(codec = avcodec_find_encoder(codec_id))) {
+    if (!codec) {
         fprintf(stderr, "could not find encoder for '%s'\n",
                                                 avcodec_get_name(codec_id));
         return NULL;
@@ -143,7 +145,7 @@ static AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt,
 }
 
 
-static int open_stream(State *self, AVCodec *codec)
+static int open_stream(State *self, const AVCodec *codec)
 {
     AVCodecContext *c;
     int nb_samples;
@@ -224,13 +226,17 @@ static int write_audio_frame(struct encoder *encoder, int final)
 {
     State *self = encoder->encoder_private;
     AVCodecContext *c;
-    AVPacket pkt = { 0 };
     AVFrame *frame;
     int ret;
     int got_packet;
     int dst_nb_samples;
 
-    av_init_packet(&pkt);
+    if (self->pkt)
+        av_packet_unref(self->pkt);
+    if (!(self->pkt = av_packet_alloc())) {
+        fprintf(stderr, "av_packet_init failed\n");
+        return -1;
+    }
     c = self->c;
     if (final)
         frame = NULL;
@@ -266,18 +272,18 @@ static int write_audio_frame(struct encoder *encoder, int final)
             return -1;
         }
 
-        for (got_packet = 0; !avcodec_receive_packet(c, &pkt); got_packet = 1)
-            if ((ret = av_write_frame(self->oc, &pkt)) < 0) {
+        for (got_packet = 0; !avcodec_receive_packet(c, self->pkt); got_packet = 1)
+            if ((ret = av_write_frame(self->oc, self->pkt)) < 0) {
                 fprintf(stderr, "error while writing audio frame: %s\n", av_err2str(ret));
                 return -1;
             }
 #else
-    if ((ret = avcodec_encode_audio2(c, &pkt, frame, &got_packet)) < 0) {
+    if ((ret = avcodec_encode_audio2(c, self->pkt, frame, &got_packet)) < 0) {
         fprintf(stderr, "error encoding audio frame: %s\n", av_err2str(ret));
         return -1;
     }
 
-    if (got_packet && (ret = av_write_frame(self->oc, &pkt)) < 0) {
+    if (got_packet && (ret = av_write_frame(self->oc, self->pkt)) < 0) {
         fprintf(stderr, "error while writing audio frame: %s\n", av_err2str(ret));
         return -1;
     }
@@ -295,6 +301,8 @@ static int write_audio_frame(struct encoder *encoder, int final)
 
 static void close_stream(State *self)
 {
+    if (self->pkt)
+        av_packet_unref(self->pkt);
     avcodec_safe_close(&self->c);
     av_frame_free(&self->frame);
     av_frame_free(&self->tmp_frame);
@@ -398,7 +406,6 @@ static int setup(struct encoder *encoder)
 {
     State *self = encoder->encoder_private;
     size_t avio_ctx_buffer_size = 4096;
-    AVCodec *codec;
     uint8_t *avio_ctx_buffer;
     enum AVCodecID codec_id;
     int profile;
@@ -441,8 +448,11 @@ static int setup(struct encoder *encoder)
 
     self->oc->pb = self->avio_ctx;
 
-    if (!(codec = add_stream(self, codec_id, profile, encoder->bitrate,
-                        encoder->target_samplerate, encoder->n_channels))) {
+    const AVCodec *codec = add_stream(self, codec_id, profile,
+                                      encoder->bitrate,
+                                      encoder->target_samplerate,
+                                      encoder->n_channels);
+    if (!codec) {
         fprintf(stderr, "failed to add stream\n");
         goto fail4;
     }

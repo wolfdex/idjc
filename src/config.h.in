@@ -13,11 +13,14 @@
 /* Set if libavcodec was found */
 #undef HAVE_AVCODEC
 
+/* Set if avcodec_receive_frame function exists */
+#undef HAVE_AVCODEC_RECEIVE_FRAME
+
 /* Set if avcodec_receive_packet function exists */
 #undef HAVE_AVCODEC_RECEIVE_PACKET
 
-/* Set if function exists */
-#undef HAVE_AVCODEC_REGISTER_ALL
+/* Set if avcodec_send_frame function exists */
+#undef HAVE_AVCODEC_SEND_FRAME
 
 /* Set if avcodec_send_packet function exists */
 #undef HAVE_AVCODEC_SEND_PACKET
@@ -36,9 +39,6 @@
 
 /* Set if av_packet_unref function exists */
 #undef HAVE_AV_PACKET_UNREF
-
-/* Set if function exists */
-#undef HAVE_AV_REGISTER_ALL
 
 /* Define to 1 if you have the `canonicalize_file_name' function. */
 #undef HAVE_CANONICALIZE_FILE_NAME
@@ -184,9 +184,6 @@
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
-
-/* Define as the return type of signal handlers (`int' or `void'). */
-#undef RETSIGTYPE
 
 /* Define to 1 if all of the C90 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for

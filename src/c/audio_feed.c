@@ -34,70 +34,44 @@ int audio_feed_process_audio(jack_nframes_t n_frames, void *arg)
     {
     struct audio_feed *self = audio_feed;
     struct threads_info *ti = self->threads_info;
-    struct encoder *e;
-    struct recorder *r;
     sample_t *input_port_buffer[2];
     int i;
 
     input_port_buffer[0] = jack_port_get_buffer(g.port.output_in_l, n_frames);
     input_port_buffer[1] = jack_port_get_buffer(g.port.output_in_r, n_frames);
 
-    /* feed pcm audio data to all encoders that request it */
-    for (i = 0; i < ti->n_encoders; i++)
+    void process(struct audio_feed_data *afdata)
         {
-        e = ti->encoder[i];
-        reevaluate_encoder:
-        switch (e->jack_dataflow_control)
+        reevaluate:
+        switch (afdata->jack_dataflow_control)
             {
             case JD_OFF:
                 break;
             case JD_ON:
-                while (jack_ringbuffer_write_space(e->input_rb[1]) < n_frames * sizeof (sample_t)) {
+                while (jack_ringbuffer_write_space(afdata->input_rb[1]) < n_frames * sizeof (sample_t)) {
                     nanosleep(&(struct timespec){0, 100000}, NULL);
-                    if (r->jack_dataflow_control != JD_ON)
-                        goto reevaluate_encoder;
+                    if (afdata->jack_dataflow_control != JD_ON)
+                        goto reevaluate;
                 }
 
-                jack_ringbuffer_write(e->input_rb[0], (char *)input_port_buffer[0], n_frames * sizeof (sample_t));
-                jack_ringbuffer_write(e->input_rb[1], (char *)input_port_buffer[1], n_frames * sizeof (sample_t));
+                jack_ringbuffer_write(afdata->input_rb[0], (char *)input_port_buffer[0], n_frames * sizeof (sample_t));
+                jack_ringbuffer_write(afdata->input_rb[1], (char *)input_port_buffer[1], n_frames * sizeof (sample_t));
                 break;
             case JD_FLUSH:
-                jack_ringbuffer_reset(e->input_rb[0]);
-                jack_ringbuffer_reset(e->input_rb[1]);
-                e->jack_dataflow_control = JD_OFF;
+                jack_ringbuffer_reset(afdata->input_rb[0]);
+                jack_ringbuffer_reset(afdata->input_rb[1]);
+                afdata->jack_dataflow_control = JD_OFF;
                 break;
             default:
                 fprintf(stderr, "jack_process_callback: unhandled jack_dataflow_control parameter\n");
             }
         }
+
+    for (i = 0; i < ti->n_encoders; i++)
+        process(&(ti->encoder[i]->afdata));
 
     for (i = 0; i < ti->n_recorders; i++)
-        {
-        r = ti->recorder[i];
-        reevaluate_recorder:
-        switch (r->jack_dataflow_control)
-            {
-            case JD_OFF:
-                break;
-            case JD_ON:
-                while (jack_ringbuffer_write_space(r->input_rb[1]) < n_frames * sizeof (sample_t)) {
-                    nanosleep(&(struct timespec){0, 100000}, NULL);
-                    if (r->jack_dataflow_control != JD_ON)
-                        goto reevaluate_recorder;
-                }
-
-                jack_ringbuffer_write(r->input_rb[0], (char *)input_port_buffer[0], n_frames * sizeof (sample_t));
-                jack_ringbuffer_write(r->input_rb[1], (char *)input_port_buffer[1], n_frames * sizeof (sample_t));
-                break;
-            case JD_FLUSH:
-                jack_ringbuffer_reset(r->input_rb[0]);
-                jack_ringbuffer_reset(r->input_rb[1]);
-                r->jack_dataflow_control = JD_OFF;
-                break;
-            default:
-                fprintf(stderr, "jack_process_callback: unhandled jack_dataflow_control parameter\n");
-            }
-        }
+        process(&(ti->recorder[i]->afdata));
 
     return 0;
     }

@@ -20,13 +20,14 @@
 #ifndef SOURCECLIENT_H
 #define SOURCECLIENT_H
 
+#include "audio_feed.h"
+
 enum { FAILED, SUCCEEDED }; /* use for return values to commandmap(pped) functions */
 enum { FALSE, TRUE };
 
 struct encoder;
 struct streamer;
 struct recorder;
-struct audio_feed;
 
 struct threads_info
     {
@@ -53,11 +54,10 @@ struct commandmap
     int (*function)(struct threads_info *ti, struct universal_vars *uv, void *other_parameter);
     void *other_parameter;
     };
-    
+
 #include "encoder.h"
 #include "streamer.h"
 #include "recorder.h"
-#include "audio_feed.h"
 
 void sourceclient_init();
 int sourceclient_main();

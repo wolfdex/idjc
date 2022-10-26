@@ -1,16 +1,15 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)
-AC_INIT([idjc], [0.9.3], [https://idjc.sourceforge.io])
+AC_PREREQ([2.71])
+AC_INIT([idjc],[0.9.4],[https://idjc.sourceforge.io])
 AC_SUBST(COPYRIGHT_YEAR, [2022])
-AC_CANONICAL_SYSTEM
+AC_CANONICAL_TARGET
 AC_CONFIG_SRCDIR([config.h.in])
 AM_INIT_AUTOMAKE
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 # Generate python installation stuff
-#m4_define_default([_AM_PYTHON_INTERPRETER_LIST],[python3.8 python3.7 python3.9])
 AM_PATH_PYTHON([3.7])
 AC_SUBST([PYTHON_PREFIX], [\${prefix}])  # Allow local installation of idjcmonitor
 AC_SUBST([idjcpythondir], [\${pkglibdir}/site-packages])
@@ -47,12 +46,14 @@ if test ${GIT_PROG_EXISTS} = "yes" ; then
         AM_CONDITIONAL([GIT_VERSION_CONTROL],[true])
     else
         AC_MSG_RESULT([no])
-	AM_CONDITIONAL([GIT_VERSION_CONTROL],[false])
+        AM_CONDITIONAL([GIT_VERSION_CONTROL],[false])
     fi
+else
+    AM_CONDITIONAL([GIT_VERSION_CONTROL],[false])
 fi
 
 AC_ARG_ENABLE([libav],
-   AC_HELP_STRING([--disable-libav],[remove capability to decode m4a/wma/avi files]),[makelibav=$enableval],[makelibav="maybe"])
+   AS_HELP_STRING([--disable-libav],[remove capability to decode m4a/wma/avi files]),[makelibav=$enableval],[makelibav="maybe"])
 
 if test $makelibav != "no" ; then
    AH_BOTTOM(
@@ -62,12 +63,15 @@ if test $makelibav != "no" ; then
 
    PKG_CHECK_MODULES([LIBAVCODEC], [libavcodec], [AC_DEFINE(HAVE_AVCODEC, 1, [Set if libavcodec was found])
             AC_SUBST(HAVE_AVCODEC, 1)
-            AC_CHECK_LIB([avcodec],[avcodec_decode_audio4], :, AC_MSG_ERROR("configure with --disable-libav or update ffmpeg/libav"))
-            AC_CHECK_LIB([avcodec],[avcodec_send_packet], AC_DEFINE(HAVE_AVCODEC_SEND_PACKET, 1, [Set if avcodec_send_packet function exists]))
-            AC_CHECK_LIB([avcodec],[avcodec_receive_packet], AC_DEFINE(HAVE_AVCODEC_RECEIVE_PACKET, 1, [Set if avcodec_receive_packet function exists]))
-            AC_CHECK_LIB([avcodec],[avcodec_register_all], AC_DEFINE(HAVE_AVCODEC_REGISTER_ALL, 1, [Set if function exists]))
-            ],
-            AC_SUBST(HAVE_AVCODEC, 0)
+            AC_CHECK_LIB([avcodec],[avcodec_send_frame],
+                         AC_DEFINE(HAVE_AVCODEC_SEND_FRAME, 1, [Set if avcodec_send_frame function exists]))
+            AC_CHECK_LIB([avcodec],[avcodec_receive_frame],
+                         AC_DEFINE(HAVE_AVCODEC_RECEIVE_FRAME, 1, [Set if avcodec_receive_frame function exists]))
+            AC_CHECK_LIB([avcodec],[avcodec_send_packet],
+                         AC_DEFINE(HAVE_AVCODEC_SEND_PACKET, 1, [Set if avcodec_send_packet function exists]))
+            AC_CHECK_LIB([avcodec],[avcodec_receive_packet],
+                         AC_DEFINE(HAVE_AVCODEC_RECEIVE_PACKET, 1, [Set if avcodec_receive_packet function exists]))
+            ], AC_SUBST(HAVE_AVCODEC, 0)
 
             if test $makelibav = "yes" ; then
                AC_MSG_ERROR([libavcodec not detected but specifically requested in configure options (libav)])
@@ -75,9 +79,9 @@ if test $makelibav != "no" ; then
                AC_MSG_WARN([IDJC will be built without wma/mp4/ape support])
             fi)
 
-   PKG_CHECK_MODULES([LIBAVFORMAT], [libavformat], [AC_DEFINE(HAVE_AVFORMAT, 1, [Set if libavformat was found])
-            AC_SUBST(HAVE_AVFORMAT, 1)
-            AC_CHECK_LIB([avformat],[av_register_all], AC_DEFINE(HAVE_AV_REGISTER_ALL, 1, [Set if function exists]))],
+   PKG_CHECK_MODULES([LIBAVFORMAT], [libavformat], [
+            AC_DEFINE(HAVE_AVFORMAT, 1, [Set if libavformat was found])
+            AC_SUBST(HAVE_AVFORMAT, 1)],
             AC_SUBST(HAVE_AVFORMAT, 0)
 
             if test $makelibav = "yes" ; then
@@ -117,7 +121,7 @@ fi
 AC_CHECK_LIB([avutil], [av_opt_set_sample_fmt], AC_DEFINE(USE_SWRESAMPLE, 1, [Set if libswresample allows format conversion]))
 
 AC_ARG_ENABLE([speex],
-   AC_HELP_STRING([--disable-speex],[remove the capability to play/stream speex]),
+   AS_HELP_STRING([--disable-speex],[remove the capability to play/stream speex]),
    [makespeex=$enableval],[makespeex="maybe"])
 
 if test $makespeex != "no" ; then
@@ -146,7 +150,7 @@ else
 fi
 
 AC_ARG_ENABLE([flac],
-   AC_HELP_STRING([--disable-flac],[remove the capability to play/stream in FLAC]),
+   AS_HELP_STRING([--disable-flac],[remove the capability to play/stream in FLAC]),
    [makeflac=$enableval],[makeflac="maybe"])
 
 if test $makeflac != "no" ; then
@@ -176,7 +180,7 @@ fi
 AC_CHECK_HEADERS([mpg123.h libavutil/channel_layout.h])
 
 AC_ARG_ENABLE(mpg123,
-   AC_HELP_STRING([--disable-mpg123],[remove capability to play mp3 format]),[makempg123=$enableval],[makempg123="maybe"])
+   AS_HELP_STRING([--disable-mpg123],[remove capability to play mp3 format]),[makempg123=$enableval],[makempg123="maybe"])
 
 AC_CHECK_LIB([mpg123], [mpg123_param2], :, AC_DEFINE([MPG123_ENUM_API], [], [Defined if using really old version]))
 
@@ -203,7 +207,7 @@ fi
 AC_CHECK_HEADERS([lame/lame.h])
 
 AC_ARG_ENABLE(lame,
-   AC_HELP_STRING([--disable-lame],[remove capability to stream/record mp3 format]),[makelame=$enableval],[makelame="maybe"])
+   AS_HELP_STRING([--disable-lame],[remove capability to stream/record mp3 format]),[makelame=$enableval],[makelame="maybe"])
 
 if test $makelame != "no" ; then
 AC_CHECK_LIB([mp3lame -lm], [lame_init],
@@ -222,7 +226,7 @@ else
 fi
 
 AC_ARG_ENABLE([twolame],
-   AC_HELP_STRING([--disable-twolame],[remove the capability to stream in mp2]),
+   AS_HELP_STRING([--disable-twolame],[remove the capability to stream in mp2]),
    [maketwolame=$enableval],[maketwolame="maybe"])
 
 if test $maketwolame != "no" ; then
@@ -242,7 +246,7 @@ else
 fi
 
 AC_ARG_ENABLE([opus],
-   AC_HELP_STRING([--disable-opus],[remove capability to play/stream in opus format]),
+   AS_HELP_STRING([--disable-opus],[remove capability to play/stream in opus format]),
    [makeopus=$enableval],[makeopus="maybe"])
 
 AC_CHECK_LIB([ogg], [ogg_stream_flush_fill],[
@@ -277,7 +281,6 @@ AC_CHECK_FUNCS([sqrt pow], :, [AC_CHECK_LIB([m], [sqrt, pow], AC_SUBST(LIBM, "-l
 	AC_MSG_ERROR([math library is missing critical function]))])
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_CHECK_HEADERS([fcntl.h jack/jack.h jack/transport.h pthread.h], :, AC_MSG_ERROR([Critical header file missing]))
 
 # Checks for typedefs, structures, and compiler characteristics.
@@ -288,7 +291,6 @@ AC_TYPE_SIZE_T
 
 # Checks for library functions.
 AC_FUNC_MALLOC
-AC_TYPE_SIGNAL
 AC_CHECK_FUNCS([memset strchr], :, AC_MSG_ERROR([Critical function missing]))
 AC_CHECK_FUNCS([getline strndup canonicalize_file_name], :,
       [AC_DEFINE([USE_BSD_COMPAT],[1],

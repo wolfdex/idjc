@@ -21,6 +21,7 @@
 #define AUDIO_FEED_H
 
 #include <jack/jack.h>
+#include <jack/ringbuffer.h>
 #include "sourceclient.h"
 
 struct audio_feed
@@ -28,6 +29,16 @@ struct audio_feed
     struct threads_info *threads_info;
     jack_nframes_t sample_rate;
     };
+
+enum jack_dataflow { JD_OFF, JD_ON, JD_FLUSH };
+
+struct audio_feed_data
+    {
+    enum jack_dataflow jack_dataflow_control; /* tells the jack callback routine what we want it to do */
+    jack_ringbuffer_t *input_rb[2];           /* circular buffer containing pcm audio data */
+    };
+
+struct universal_vars;
 
 struct audio_feed *audio_feed_init(struct threads_info *ti);
 void audio_feed_deactivate(struct audio_feed *self);

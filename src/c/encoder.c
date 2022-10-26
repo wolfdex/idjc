@@ -72,12 +72,12 @@ static struct encoder_data_format encoder_lex_format(char *source, char *family,
         .family = ENCODER_FAMILY_UNHANDLED,
         .codec = ENCODER_CODEC_UNHANDLED
         };
-        
+
     void warning(char *msg, char *setting)
         {
         fprintf(stderr, "warning: %s: setting: %s\n", msg, setting);
         }
-        
+
     if (!strcmp(source, "jack"))
         df.source = ENCODER_SOURCE_JACK;
 
@@ -86,43 +86,43 @@ static struct encoder_data_format encoder_lex_format(char *source, char *family,
 
     if (!strcmp(family, "mpeg"))
         df.family = ENCODER_FAMILY_MPEG;
-        
+
     if (!strcmp(family, "ogg"))
         df.family = ENCODER_FAMILY_OGG;
 
     if (!strcmp(family, "webm"))
         df.family = ENCODER_FAMILY_WEBM;
-        
+
     if (!strcmp(codec, "mp3"))
         df.codec = ENCODER_CODEC_MP3;
 
     if (!strcmp(codec, "mp2"))
         df.codec = ENCODER_CODEC_MP2;
-        
+
     if (!strcmp(codec, "aac"))
         df.codec = ENCODER_CODEC_AAC;
-        
+
     if (!strcmp(codec, "aacpv2"))
         df.codec = ENCODER_CODEC_AACPLUSV2;
-        
+
     if (!strcmp(codec, "vorbis"))
         df.codec = ENCODER_CODEC_VORBIS;
-        
+
     if (!strcmp(codec, "flac"))
         df.codec = ENCODER_CODEC_FLAC;
-    
+
     if (!strcmp(codec, "speex"))
         df.codec = ENCODER_CODEC_SPEEX;
-        
+
     if (!strcmp(codec, "opus"))
         df.codec = ENCODER_CODEC_OPUS;
 
     if (df.source == ENCODER_SOURCE_UNHANDLED)
         warning("encoder source is not recognised", source);
-    
+
     if (df.family == ENCODER_FAMILY_UNHANDLED)
         warning("encoder family is not recognized", family);
-        
+
     if (df.codec == ENCODER_CODEC_UNHANDLED)
         warning("encoder codec is not recognized", codec);
 
@@ -144,23 +144,23 @@ static int encoder_get_resample_mode(char *rm_string)
 static void encoder_free_input_ringbuffers(struct encoder *self)
     {
     struct timespec ms10 = { 0, 10000000 };
-    
-    if (self->jack_dataflow_control == JD_ON)
-        self->jack_dataflow_control = JD_FLUSH;
-    while (self->jack_dataflow_control != JD_OFF)
+
+    if (self->afdata.jack_dataflow_control == JD_ON)
+        self->afdata.jack_dataflow_control = JD_FLUSH;
+    while (self->afdata.jack_dataflow_control != JD_OFF)
         nanosleep(&ms10, NULL);
-    
-    if (self->input_rb[0])
-        jack_ringbuffer_free(self->input_rb[0]);
-    if (self->input_rb[1])
-        jack_ringbuffer_free(self->input_rb[1]);
-    self->input_rb[0] = self->input_rb[1] = NULL;
+
+    if (self->afdata.input_rb[0])
+        jack_ringbuffer_free(self->afdata.input_rb[0]);
+    if (self->afdata.input_rb[1])
+        jack_ringbuffer_free(self->afdata.input_rb[1]);
+    self->afdata.input_rb[0] = self->afdata.input_rb[1] = NULL;
     }
 
 static void encoder_free_resampler(struct encoder *self)
     {
     int i;
-    
+
     for (i = 0; i < 2; i++)
         if (self->src_state[i])
             {
@@ -172,7 +172,7 @@ static void encoder_free_resampler(struct encoder *self)
 static void encoder_plugin_terminate(struct encoder *self)
     {
     struct timespec ms10 = { 0, 10000000 };
-        
+
     self->run_request_f = FALSE;
     if (self->encoder_state != ES_STOPPED)
         fprintf(stderr, "encoder_plugin_terminate: waiting for encoder to finish\n");
@@ -214,7 +214,7 @@ static long encoder_input_rb_mono_downmix(jack_ringbuffer_t **rb, float *bptr, i
     jack_ringbuffer_read_advance(rb[1], n_samples * sizeof (sample_t));
     return n_samples;
     }
-    
+
 static long encoder_input_rb_stereo(jack_ringbuffer_t **rb, float **dest, long max_samples)
     {
     long n_samples;
@@ -227,7 +227,7 @@ static long encoder_input_rb_stereo(jack_ringbuffer_t **rb, float **dest, long m
         jack_ringbuffer_read(*rb, (char *)*dest, n_samples * sizeof (sample_t));
     return n_samples;
     }
-    
+
 static long encoder_input_rb_one_channel(jack_ringbuffer_t **rb, float **dest, long max_samples, int c)
     {
     long n_samples;
@@ -243,15 +243,15 @@ static long encoder_resampler_get_data(void *cb_data, float **data)
     {
     struct encoder *encoder = cb_data;
     long n_samples;
-    
+
     if (encoder->rs_channel >= 0)
         {
-        n_samples = encoder_input_rb_one_channel(encoder->input_rb, encoder->rs_input, RS_INPUT_SAMPLES, encoder->rs_channel);
+        n_samples = encoder_input_rb_one_channel(encoder->afdata.input_rb, encoder->rs_input, RS_INPUT_SAMPLES, encoder->rs_channel);
         *data = encoder->rs_input[encoder->rs_channel];
         }
     else
         {
-        n_samples = encoder_input_rb_mono_downmix(encoder->input_rb, encoder->rs_input[0], RS_INPUT_SAMPLES);
+        n_samples = encoder_input_rb_mono_downmix(encoder->afdata.input_rb, encoder->rs_input[0], RS_INPUT_SAMPLES);
         *data = encoder->rs_input[0];
         }
 
@@ -264,10 +264,10 @@ struct encoder_ip_data *encoder_get_input_data(struct encoder *encoder, size_t m
     ssize_t n_samples;
     size_t samples_available;
     int i;
-    
+
     if (max_samples == 0)
         return NULL;
-    
+
     if (!(id = calloc(1, sizeof (struct encoder_ip_data))))
         {
         fprintf(stderr, "encoder_get_input_data: malloc failure\n");
@@ -293,17 +293,17 @@ struct encoder_ip_data *encoder_get_input_data(struct encoder *encoder, size_t m
         }
     if (!encoder->resample_f)
         {
-        if (jack_ringbuffer_read_space(encoder->input_rb[1]) / sizeof (sample_t) < min_samples_needed)
+        if (jack_ringbuffer_read_space(encoder->afdata.input_rb[1]) / sizeof (sample_t) < min_samples_needed)
             goto no_data;
         if (encoder->n_channels == 2)
-            id->qty_samples = encoder_input_rb_stereo(encoder->input_rb, id->buffer, max_samples);
+            id->qty_samples = encoder_input_rb_stereo(encoder->afdata.input_rb, id->buffer, max_samples);
         else
-            id->qty_samples = encoder_input_rb_mono_downmix(encoder->input_rb, id->buffer[0], max_samples);
+            id->qty_samples = encoder_input_rb_mono_downmix(encoder->afdata.input_rb, id->buffer[0], max_samples);
         }
     else
         {                 /* handle the resampling condition */
         /* note 128 samples are held back to make sure the resampler gives the full number of samples on both reads */
-        n_samples = (ssize_t)(jack_ringbuffer_read_space(encoder->input_rb[1]) / sizeof (sample_t) * encoder->sr_conv_ratio) - 128;
+        n_samples = (ssize_t)(jack_ringbuffer_read_space(encoder->afdata.input_rb[1]) / sizeof (sample_t) * encoder->sr_conv_ratio) - 128;
         samples_available = (n_samples > 0) ? n_samples : 0;
         if (samples_available > max_samples)
             samples_available = max_samples;
@@ -329,14 +329,14 @@ struct encoder_ip_data *encoder_get_input_data(struct encoder *encoder, size_t m
     if (encoder->pregain != 1.0f || encoder->fadescale != 1.0f)
         {
         float pgain = encoder->pregain;
-        float fgain = 1.0f, fscale = encoder->fadescale; 
+        float fgain = 1.0f, fscale = encoder->fadescale;
 
         for (int i = 0; i < id->channels; ++i)
             {
             float *bp = id->buffer[i];
             fgain = encoder->fadegain;
             for (size_t s = id->qty_samples; s; --s)
-                *bp++ *= pgain * (fgain *= fscale); 
+                *bp++ *= pgain * (fgain *= fscale);
             }
 
         if (fgain < fade_floor)
@@ -352,11 +352,11 @@ struct encoder_ip_data *encoder_get_input_data(struct encoder *encoder, size_t m
     encoder_ip_data_free(id);
     return NULL;
     }
-    
+
 void encoder_ip_data_free(struct encoder_ip_data *id)
     {
     int i;
-    
+
     if (!id->caller_supplied_buffer)
         for (i = 0; i < id->channels; i++)
             if (id->buffer[i])
@@ -364,12 +364,12 @@ void encoder_ip_data_free(struct encoder_ip_data *id)
     free(id);
     }
 
-/* note encoder.mutex must be locked before helper threads can safely traverse 
+/* note encoder.mutex must be locked before helper threads can safely traverse
     encoder.output_chain to find the op structure to pass to this function */
 size_t encoder_write_packet(struct encoder_op *op, struct encoder_op_packet *packet)
     {
     size_t packet_size, written;
-     
+
     packet->header.magic = encoder_packet_magic_number;
     packet->header.serial = op->encoder->oggserial;
     packet_size = sizeof packet->header + packet->header.data_size;
@@ -389,12 +389,12 @@ size_t encoder_write_packet(struct encoder_op *op, struct encoder_op_packet *pac
     pthread_mutex_unlock(&op->mutex);
     return written;
     }
-    
+
 void encoder_write_packet_all(struct encoder *encoder, struct encoder_op_packet *packet)
     {
     struct encoder_op *iter;
     struct timespec ms10 = { 0, 10000000 };
-    
+
     while (pthread_mutex_trylock(&encoder->mutex))
         nanosleep(&ms10, NULL);
     for (iter = encoder->output_chain; iter; iter = iter->next)
@@ -405,7 +405,7 @@ void encoder_write_packet_all(struct encoder *encoder, struct encoder_op_packet 
 struct encoder_op_packet *encoder_client_get_packet(struct encoder_op *op)
     {
     struct encoder_op_packet *packet;
-    
+
     pthread_mutex_lock(&op->mutex);
     if (jack_ringbuffer_read_space(op->packet_rb) >= sizeof (struct encoder_op_packet_header))
         {
@@ -426,7 +426,7 @@ struct encoder_op_packet *encoder_client_get_packet(struct encoder_op *op)
             fprintf(stderr, "encoder_client_get_packet: packet header specifying more data than can fit in the buffer\n");
             free(packet);
             goto unlock;
-            }   
+            }
         if (packet->header.data_size)
             {
             if (!(packet->data = malloc(packet->header.data_size)))
@@ -444,7 +444,7 @@ struct encoder_op_packet *encoder_client_get_packet(struct encoder_op *op)
     pthread_mutex_unlock(&op->mutex);
     return NULL;
     }
-    
+
 void encoder_client_free_packet(struct encoder_op_packet *packet)
     {
     if (packet->data)
@@ -457,7 +457,7 @@ int encoder_client_set_flush(struct encoder_op *op)
     struct encoder *encoder = op->encoder;
     struct timespec ns1 = { 0, 1 };
     int serial;
-    
+
     while (pthread_mutex_trylock(&encoder->flush_mutex))
         nanosleep(&ns1, NULL);
     serial = encoder->oggserial;
@@ -466,14 +466,14 @@ int encoder_client_set_flush(struct encoder_op *op)
     return serial;
     }
 
-/* this is called from a recipient thread to obtain a handle for getting data */ 
+/* this is called from a recipient thread to obtain a handle for getting data */
 /* the numeric_id is the encoder that is requested */
 struct encoder_op *encoder_register_client(struct threads_info *ti, int numeric_id)
     {
     struct encoder *enc;
     struct encoder_op *op;
     struct timespec ms10 = { 0, 10000000 };
-    
+
     if (numeric_id >= ti->n_encoders || numeric_id < 0)
         {
         fprintf(stderr, "encoder_register_client: invalid encoder numeric_id %d\n", numeric_id);
@@ -501,12 +501,12 @@ struct encoder_op *encoder_register_client(struct threads_info *ti, int numeric_
     pthread_mutex_unlock(&op->encoder->mutex);
     return op;
     }
-    
+
 void encoder_unregister_client(struct encoder_op *op)
     {
     struct encoder_op *iter;
     struct timespec ms10 = { 0, 10000000 };      /* ten milliseconds */
-    
+
     fprintf(stderr, "encoder_unregister_client called\n");
     while (pthread_mutex_trylock(&op->encoder->mutex))
         nanosleep(&ms10, NULL);
@@ -593,7 +593,7 @@ int encoder_start(struct threads_info *ti, struct universal_vars *uv, void *othe
                     }
                     break;
 #endif
-                
+
                 case ENCODER_FAMILY_MPEG:
                     switch (self->data_format.codec) {
                         case ENCODER_CODEC_MP3:
@@ -647,7 +647,7 @@ int encoder_start(struct threads_info *ti, struct universal_vars *uv, void *othe
                             goto failed;
                     }
                     break;
-                    
+
                 case ENCODER_FAMILY_UNHANDLED:
                 default:
                     break;
@@ -686,19 +686,19 @@ int encoder_start(struct threads_info *ti, struct universal_vars *uv, void *othe
         }
     else
         fprintf(stderr, "encoder_start: resampler will not be used\n");
-        
+
     if (encoder_init && encoder_init(self, ev))
         {
         if (self->data_format.source == ENCODER_SOURCE_JACK)
             {
-            self->input_rb[0] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
-            self->input_rb[1] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
-            if (!(self->input_rb[0] && self->input_rb[1]))
+            self->afdata.input_rb[0] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
+            self->afdata.input_rb[1] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
+            if (!(self->afdata.input_rb[0] && self->afdata.input_rb[1]))
                 {
                 fprintf(stderr, "encoder_start: jack ringbuffer creation failure\n");
                 goto failed;
                 }
-            self->jack_dataflow_control = JD_ON;
+            self->afdata.jack_dataflow_control = JD_ON;
             }
 
         self->run_request_f = TRUE;
@@ -724,18 +724,18 @@ int encoder_start(struct threads_info *ti, struct universal_vars *uv, void *othe
 int encoder_stop(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct encoder *self = ti->encoder[uv->tab];
-    
+
     encoder_unlink(self);
     if (self->output_chain)
         fprintf(stderr, "encoder_stop: function has been called with encoder_op objects still attached\n");
     fprintf(stderr, "encoder_stop: encoder is stopped\n");
     return SUCCEEDED;
     }
- 
+
 int encoder_update(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct encoder *self = ti->encoder[uv->tab];
-    
+
     encoder_unlink(self);
     return encoder_start(ti, uv, other);
     }
@@ -743,20 +743,20 @@ int encoder_update(struct threads_info *ti, struct universal_vars *uv, void *oth
 int encoder_initiate_fade(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct encoder *self = ti->encoder[uv->tab];
-    
+
     pthread_mutex_lock(&self->fade_mutex);
     if (self->fadescale == 1.0f)
         self->fadescale = powf(fade_floor, 1.f / (6.f * self->target_samplerate));
     pthread_mutex_unlock(&self->fade_mutex);
-    
+
     return SUCCEEDED;
     }
- 
+
 int encoder_new_song_metadata(struct threads_info *ti, struct universal_vars *uv, void *other)
     {
     struct encoder *self;
     struct encoder_vars *ev = other;
-    
+
     if (uv->tab == -1)
         {
         for (uv->tab = 0; uv->tab < ti->n_encoders; uv->tab++)
@@ -764,7 +764,7 @@ int encoder_new_song_metadata(struct threads_info *ti, struct universal_vars *uv
                 return FAILED;
         for (int i = 0; i < ti->n_recorders; i++)
             if (!(recorder_new_metadata(ti->recorder[i], ev->artist, ev->title, ev->album)))
-                return FAILED;  
+                return FAILED;
         }
     else
         {
@@ -824,7 +824,7 @@ int encoder_new_custom_metadata(struct threads_info *ti, struct universal_vars *
 struct encoder *encoder_init(struct threads_info *ti, int numeric_id)
     {
     struct encoder *self;
-    
+
     if (!(self = calloc(1, sizeof (struct encoder))))
         {
         fprintf(stderr, "encoder_init: malloc failure\n");

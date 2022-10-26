@@ -45,14 +45,14 @@ static void calculate_gain_values(struct mic *self)
 
 static void mic_process_start(struct mic *self, jack_nframes_t nframes)
     {
-    int mode_request = self->mode_request;   
-        
+    int mode_request = self->mode_request;
+
     /* mic mode changes are handled here */
     if (mode_request != self->mode)
         {
         if (self->mode == 0)
             fprintf(stderr, "activated ch %d\n", self->id);
-            
+
         if (self->mode == 2)
             {
             fprintf(stderr, "leaving fully processed mode, ch %d\n", self->id);
@@ -96,14 +96,14 @@ static void mic_process_start(struct mic *self, jack_nframes_t nframes)
 
 void mic_process_start_all(struct mic **mics, jack_nframes_t nframes)
     {
-    while (*mics)   
+    while (*mics)
         mic_process_start(*mics++, nframes);
     }
 
 static void mic_process_stage1(struct mic *self)
     {
     float sample = *self->jadp++;
-    
+
     if (isunordered(sample, sample))
         sample = 0.0f;
 
@@ -124,8 +124,8 @@ static void mic_process_stage2(struct mic *self)
         self->mute -= self->mute * 12.348f / self->sample_rate;
     else
         self->mute = self->open ? 1.0f : 0.0f;
-     
-    /* unprocessed audio */  
+
+    /* unprocessed audio */
     self->unp = sample * host->mgain;
     /* unprocessed audio + mute */
     self->unpm = self->unp * self->mute;
@@ -147,8 +147,8 @@ static void mic_process_stage4(struct mic *self)
     {
     float m = self->mic_g;
     float a = self->aux_g;
-    struct mic *host = self->host;   
-        
+    struct mic *host = self->host;
+
     if (host->mode == 2)
         self->lrc = agc_process_stage3(self->agc);
     else
@@ -160,12 +160,12 @@ static void mic_process_stage4(struct mic *self)
     /* the same but with muting */
     self->lcm = self->lc * self->mute;
     self->rcm = self->rc * self->mute;
-    
+
     /* record peak levels */
     float l = fabsf(self->lrc);
     if (l > self->peak)
         self->peak = l;
-        
+
     self->munp = self->unp * m;
     self->munpm = self->unpm * m;
     self->munpmdj = self->unpmdj * m;
@@ -194,7 +194,7 @@ float mic_process_all(struct mic **mics)
             mic_process_stage2, mic_process_stage3, mic_process_stage4, NULL };
     void (**mpp)(struct mic *);
     struct mic **mp;
-    float df, agcdf;   
+    float df, agcdf;
 
     /* processing broken up into stages to allow state sharing between
      * stereo pairs of microphones
@@ -203,18 +203,18 @@ float mic_process_all(struct mic **mics)
         for (mp = mics; *mp; mp++)
             if ((*mp)->mode)
                 (*mpp)(*mp);
-            
+
     /* ducking factor tally - lowest wins */
     for (df = 1.0f, mp = mics; *mp; mp++)
         df = (df > (agcdf = agc_get_ducking_factor((*mp)->agc))) ? agcdf : df;
-          
+
     return df;
     }
 
 static int mic_getpeak(struct mic *self)
     {
     int peakdb;
-    
+
     peakdb = (int)level2db(self->peak);
     self->peak = peak_init;
     return (peakdb < 0) ? peakdb : 0;
@@ -223,7 +223,7 @@ static int mic_getpeak(struct mic *self)
 static void mic_stats(struct mic *self)
     {
     int red, yellow, green;
-    
+
     agc_get_meter_levels(self->host->agc, &red, &yellow, &green);
     fprintf(g.out, "mic_%d_levels=%d,%d,%d,%d\n", self->id,
                                     mic_getpeak(self), red, yellow, green);
@@ -259,7 +259,7 @@ static struct mic *mic_init(jack_client_t *client, int sample_rate, int id)
     {
     struct mic *self;
     char port_name[10];
-    
+
     if (!(self = calloc(1, sizeof (struct mic))))
         {
         fprintf(stderr, "mic_init: malloc failure\n");
@@ -268,7 +268,7 @@ static struct mic *mic_init(jack_client_t *client, int sample_rate, int id)
 
     self->host = self;
     self->id = id;
-    self->sample_rate = (float)sample_rate;   
+    self->sample_rate = (float)sample_rate;
     self->pan = 50;
     self->aux_g = 1.0f;
     self->peak = peak_init;
@@ -278,30 +278,30 @@ static struct mic *mic_init(jack_client_t *client, int sample_rate, int id)
         free(self);
         return NULL;
         }
-    snprintf(port_name, 10, "ch_in_%d", id);  
+    snprintf(port_name, 10, "ch_in_%hhu", (uint8_t)id);
     self->jack_port = jack_port_register(client, port_name,
-                            JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0); 
-    calculate_gain_values(self);   
-        
+                            JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
+    calculate_gain_values(self);
+
     return self;
     }
-    
+
 struct mic **mic_init_all(int n_mics, jack_client_t *client)
     {
     struct mic **mics;
     int i, sr;
     /* used to map suitable port names from the audio back-end as default connection targets */
     const char **defaults, **dp;
-        
+
     if (!(mics = calloc(n_mics + 1, sizeof (struct mic *))))
         {
         fprintf(stderr, "malloc failure\n");
         exit(5);
         }
-    
+
     sr = jack_get_sample_rate(client);
     defaults = dp = jack_get_ports(client, NULL, NULL, JackPortIsPhysical | JackPortIsOutput);
-    
+
     for (i = 0; i < n_mics; i++)
         {
         mics[i] = mic_init(client, sr, i + 1);
@@ -312,14 +312,14 @@ struct mic **mic_init_all(int n_mics, jack_client_t *client)
             }
         mics[i]->default_mapped_port_name = (dp && *dp) ? strdup(*dp++) : NULL;
         }
-        
+
     for (i = 0; i < n_mics; i += 2)
         {
         mics[i]->partner = mics[i + 1];
         mics[i + 1]->partner = mics[i];
         agc_set_as_partners(mics[i]->agc, mics[i + 1]->agc);
         }
-        
+
     if (defaults)
         jack_free(defaults);
     return mics;
@@ -333,14 +333,14 @@ static void mic_free(struct mic *self)
         {
         free(self->default_mapped_port_name);
         self->default_mapped_port_name = NULL;
-        } 
+        }
     free(self);
     }
-    
+
 void mic_free_all(struct mic **mics)
     {
-    struct mic **mp = mics;   
-        
+    struct mic **mp = mics;
+
     while (*mp)
         {
         mic_free(*mp);
@@ -348,14 +348,14 @@ void mic_free_all(struct mic **mics)
         }
     free(mics);
     }
-    
+
 void mic_valueparse(struct mic *self, char *param)
     {
     char *save = NULL, *key, *value;
 
     key = strtok_r(param, "=", &save);
-    value = strtok_r(NULL, "=", &save); 
-    
+    value = strtok_r(NULL, "=", &save);
+
     if (!strcmp(key, "mode"))
         {
         self->mode_request = value[0] - '0';

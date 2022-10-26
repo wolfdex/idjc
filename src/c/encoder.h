@@ -27,14 +27,13 @@
 #include <pthread.h>
 #include "sourceclient.h"
 
-enum jack_dataflow { JD_OFF, JD_ON, JD_FLUSH };
 enum performance_warning { PW_OK, PW_AUDIO_DATA_DROPPED };
 enum encoder_source {ENCODER_SOURCE_UNHANDLED, ENCODER_SOURCE_JACK, ENCODER_SOURCE_FILE};
 enum encoder_family {ENCODER_FAMILY_UNHANDLED, ENCODER_FAMILY_MPEG, ENCODER_FAMILY_OGG, ENCODER_FAMILY_WEBM};
 enum encoder_codec {ENCODER_CODEC_UNHANDLED, ENCODER_CODEC_MP3, ENCODER_CODEC_VORBIS, ENCODER_CODEC_FLAC, ENCODER_CODEC_SPEEX, ENCODER_CODEC_OPUS, ENCODER_CODEC_MP2, ENCODER_CODEC_AAC, ENCODER_CODEC_AACPLUSV2};
 enum encoder_state { ES_STOPPED, ES_STARTING, ES_RUNNING, ES_STOPPING, ES_PAUSED };
 enum packet_flags {     PF_UNSET    = 0x00,
-                                PF_INITIAL  = 0x01, 
+                                PF_INITIAL  = 0x01,
                                 PF_FINAL    = 0x02,
                                 PF_OGG      = 0x04,
                                 PF_MP3      = 0x08,
@@ -129,8 +128,7 @@ struct encoder
     int thread_terminate_f;              /* signal the encoder thread to exit */
     int run_request_f;                   /* to run or not to run... */
     enum encoder_state encoder_state;    /* indicate what the encoder should be doing */
-    enum jack_dataflow jack_dataflow_control;    /* tells the jack callback routine what we want it to do */
-    jack_ringbuffer_t *input_rb[2];      /* circular buffer containing pcm audio data */
+    struct audio_feed_data afdata;
     struct encoder_data_format data_format;
     int n_channels;                      /* stream parameters information... */
     int bitrate;

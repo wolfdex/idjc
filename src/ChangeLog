@@ -1,3 +1,19 @@
+* Changes in verion 0.9.4 *
+
+Initial levels for DJ audio and DJ alarm reduced.
+
+repostatus script now displays an error message if git is not installed.
+
+Fixed GIT_VERSION_CONTROL conditional not being set when git is not installed.
+
+Fixed regression in playlist information popup.
+
+Added support for ffmpeg 5.0
+
+Updated encoders to clear deprecation warnings regarding ffmpeg 4.4.1.
+
+Worked around build time warnings related to "potential" buffer overflows.
+
 * Changes in version 0.9.3 *
 
 Replaced icon with an svg version.

@@ -1,6 +1,6 @@
 /*
-#   avcodecdecode.c: decodes wma file format for xlplayer
-#   Copyright (C) 2007-2017 Stephen Fairchild (s-fairchild@users.sf.net)
+#   avcodecdecode.c: decodes wma, mp4, and other file formats for xlplayer
+#   Copyright (C) 2007-2022 Stephen Fairchild (s-fairchild@users.sf.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -25,9 +25,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <libavutil/opt.h>
-#ifdef HAVE_LIBAVUTIL_CHANNEL_LAYOUT_H
 #include <libavutil/channel_layout.h>
-#endif
 #include <libavutil/samplefmt.h>
 #include "main.h"
 #include "xlplayer.h"
@@ -40,16 +38,6 @@
 
 #ifndef AVCODEC_MAX_AUDIO_FRAME_SIZE
 #define AVCODEC_MAX_AUDIO_FRAME_SIZE 192000
-#endif
-
-#ifndef HAVE_AV_FRAME_ALLOC
-#define av_frame_alloc avcodec_alloc_frame
-#endif
-#ifndef HAVE_AV_FRAME_UNREF
-#define av_frame_unref avcodec_get_frame_defaults
-#endif
-#ifndef HAVE_AV_PACKET_UNREF
-#define av_packet_unref av_free_packet
 #endif
 
 extern int dynamic_metadata_form[];
@@ -587,7 +575,13 @@ int avcodecdecode_reg(struct xlplayer *xlplayer)
 
     while (pthread_mutex_trylock(&g.avc_mutex))
         nanosleep(&time_delay, NULL);
+
+// Prevent warning about const qualifier with ffmpeg version 4.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
     self->stream = av_find_best_stream(self->ic, AVMEDIA_TYPE_AUDIO, -1, -1, &self->codec, 0);
+#pragma GCC diagnostic pop
+
     pthread_mutex_unlock(&g.avc_mutex);
 
     if (self->stream < 0)

@@ -549,9 +549,9 @@ static void *recorder_main(void *args)
             case RM_RECORDING:
                 if (self->initial_serial == -1)
                     {
-                    while ((nbytes = jack_ringbuffer_read(self->input_rb[1], self->right, audio_buffer_elements * sizeof (sample_t))))
+                    while ((nbytes = jack_ringbuffer_read(self->afdata.input_rb[1], self->right, audio_buffer_elements * sizeof (sample_t))))
                         {
-                        jack_ringbuffer_read(self->input_rb[0], self->left, nbytes);
+                        jack_ringbuffer_read(self->afdata.input_rb[0], self->left, nbytes);
                         rl = self->left;
                         rr = self->right;
                         endp = rl + nbytes;
@@ -660,9 +660,9 @@ static void *recorder_main(void *args)
                     self->record_mode = RM_STOPPING;
                 else
                     {
-                    while ((nbytes = jack_ringbuffer_read(self->input_rb[1], self->right, audio_buffer_elements * sizeof (sample_t))))
+                    while ((nbytes = jack_ringbuffer_read(self->afdata.input_rb[1], self->right, audio_buffer_elements * sizeof (sample_t))))
                         {
-                        jack_ringbuffer_read(self->input_rb[0], self->left, nbytes);
+                        jack_ringbuffer_read(self->afdata.input_rb[0], self->left, nbytes);
                         }
 
                     if (self->unpause_request)
@@ -679,12 +679,12 @@ static void *recorder_main(void *args)
                     {
                     sf_close(self->sf);
                     fclose(self->fpcue);
-                    self->jack_dataflow_control = JD_FLUSH;
-                    while (self->jack_dataflow_control != JD_OFF) {
+                    self->afdata.jack_dataflow_control = JD_FLUSH;
+                    while (self->afdata.jack_dataflow_control != JD_OFF) {
                         nanosleep(&ms10, NULL);
                     }
-                    jack_ringbuffer_free(self->input_rb[0]);
-                    jack_ringbuffer_free(self->input_rb[1]);
+                    jack_ringbuffer_free(self->afdata.input_rb[0]);
+                    jack_ringbuffer_free(self->afdata.input_rb[1]);
                     free(self->left);
                     free(self->right);
                     free(self->combined);
@@ -953,9 +953,9 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             return FAILED;
             }
 
-        self->input_rb[0] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
-        self->input_rb[1] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
-        if (!(self->input_rb[0] && self->input_rb[1]))
+        self->afdata.input_rb[0] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
+        self->afdata.input_rb[1] = jack_ringbuffer_create(rb_n_samples * sizeof (sample_t));
+        if (!(self->afdata.input_rb[0] && self->afdata.input_rb[1]))
             {
             fprintf(stderr, "encoder_start: jack ringbuffer creation failure\n");
             free(self->pathname);
@@ -965,7 +965,7 @@ int recorder_start(struct threads_info *ti, struct universal_vars *uv, void *oth
             fprintf(stderr, "recorder_start: failed to create ringbuffers\n");
             return FAILED;
             }
-        self->jack_dataflow_control = JD_ON;
+        self->afdata.jack_dataflow_control = JD_ON;
         self->initial_serial = -1;
         self->new_artist_title = TRUE; /* risk inheriting old metadata rather than start with empty */
         fprintf(stderr, "recorder_start: in FLAC mode\n");

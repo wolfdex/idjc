@@ -1,5 +1,5 @@
 /*
-#   vorbistagparse.c: parse vorbis tags 
+#   vorbistagparse.c: parse vorbis tags
 #   Copyright (C) 2013 Stephen Fairchild (s-fairchild@users.sourceforge.net)
 #
 #   This program is free software: you can redistribute it and/or modify
@@ -47,7 +47,7 @@ key_valid(char const *key, size_t n)
     {
     if (n == 0)
         return 0;
-        
+
     while (n--)
         {
         if (*key < 0x20 || *key > 0x7D || *key == '=')
@@ -75,13 +75,13 @@ insert_value(GHashTable *hash_table, char *key, char *value)
     {
     GSList *slist = NULL;
     gpointer orig_key = NULL;
-    
+
     if (g_hash_table_lookup_extended(hash_table, key, &orig_key, (gpointer *)&slist))
         {
         g_hash_table_steal(hash_table, key);
         free(orig_key);
         }
-    
+
     slist = g_slist_append(slist, (gpointer)value);
     g_hash_table_insert(hash_table, key, (gpointer)slist);
     }
@@ -95,7 +95,7 @@ parse(struct vtag *s, char const * const data, size_t bytes)
 
     if (bytes < min_vorbis_tag_size)
         return VE_CROPPED;
-    
+
     len = READINT(p);
     if (p + len + 4 > end)
         return VE_CROPPED;
@@ -108,11 +108,11 @@ parse(struct vtag *s, char const * const data, size_t bytes)
     while (to_do--) {
         if (p + 4 > end)
             return VE_CROPPED;
-        
+
         len = READINT(p);
         if (p + len > end)
             return VE_CROPPED;
-            
+
         switch (len) {
             case 0:
             case 1:
@@ -127,7 +127,7 @@ parse(struct vtag *s, char const * const data, size_t bytes)
                     return VE_MISSING_VALUE;
                 if (!key_valid(p, sep - p))
                     return VE_INVALID_KEY;
-                
+
                 char *key = strlwr(strndup(p, sep - p));
                 if (!key)
                     return VE_ALLOCATION;
@@ -143,7 +143,7 @@ parse(struct vtag *s, char const * const data, size_t bytes)
             }
         p += len;
         }
-        
+
     return VE_OK;
     }
 
@@ -157,13 +157,13 @@ static struct vtag *
 vtag_create(int *error)
     {
     struct vtag *s;
-    
+
     if (!(s = calloc(1, sizeof (struct vtag))))
         {
         *error = VE_ALLOCATION;
         return NULL;
         }
-    
+
     if (!(s->hash_table = g_hash_table_new_full(g_str_hash, g_str_equal,
                                     free, (GDestroyNotify)free_slist_value)))
         {
@@ -171,7 +171,7 @@ vtag_create(int *error)
         *error = VE_ALLOCATION;
         return NULL;
         }
-        
+
     return s;
     }
 
@@ -180,7 +180,7 @@ vtag_parse(void *data, size_t bytes, int *error)
     {
     struct vtag *s;
     int error_;
-    
+
     if (!error)
         error = &error_;
 
@@ -202,10 +202,10 @@ vtag_new(const char *vendor_string, int *error)
     {
     struct vtag *s;
     int error_;
-    
+
     if (!error)
         error = &error_;
-    
+
     if (!(s = vtag_create(error)))
         return NULL;
 
@@ -228,7 +228,7 @@ static void
 slist_storage_calc(gpointer data, gpointer user_data)
     {
     struct valuestore *vs = user_data;
-    
+
     vs->length += strlen(data);
     ++vs->count;
     }
@@ -255,10 +255,10 @@ slist_dump(gpointer data, gpointer user_data)
     struct valuestore2 *vs = user_data;
     char **p = vs->p;
     size_t len1, len2;
-    
+
     len1 = strlen(vs->key);
     len2 = strlen(data);
-    WRITEINT((*p), (len1 + 1 + len2)); 
+    WRITEINT((*p), (len1 + 1 + len2));
     memcpy(*p, vs->key, len1);
     *p += len1;
     *(*p)++ = '=';
@@ -271,7 +271,7 @@ ht_dump(gpointer key, gpointer value, gpointer user_data)
     {
     GSList *slist = value;
     struct valuestore2 vs = {user_data, key};
-    
+
     g_slist_foreach(slist, slist_dump, &vs);
     }
 
@@ -303,10 +303,10 @@ vtag_serialize(struct vtag *s, struct vtag_block *block, char const *prefix)
     size_t len;
     char *p;
     struct valuestore vs = {0, 0};
-    
+
     if (!prefix)
         prefix = "";
-    
+
     /* determine how much space to allocate */
     g_hash_table_foreach(s->hash_table, ht_storage_calc, &vs);
     len = vs.length + 8 + strlen(s->vendor_string) + strlen(prefix);
@@ -317,11 +317,11 @@ vtag_serialize(struct vtag *s, struct vtag_block *block, char const *prefix)
             return VE_ALLOCATION;
         block->private->blocklen = len;
         }
-    
+
     block->length = len;
     p = block->data;
 
-    strncpy(p, prefix, len = strlen(prefix));
+    memcpy(p, prefix, len = strlen(prefix));
     p += len;
     len = strlen(s->vendor_string);
     WRITEINT(p, len);
@@ -337,8 +337,8 @@ vtag_serialize(struct vtag *s, struct vtag_block *block, char const *prefix)
 static void
 slist_data_length(gpointer data1, gpointer data2)
     {
-    struct valuestore *vs = (struct valuestore *)data2;    
-        
+    struct valuestore *vs = (struct valuestore *)data2;
+
     vs->length += strlen(data1);
     ++vs->count;
     }
@@ -348,7 +348,7 @@ slist_lookup(struct vtag *s, char const *key)
     {
     GSList *slist;
     char *lcase_key;
-    
+
     if (!(lcase_key = strlwr(strdup(key))))
         {
         fprintf(stderr, "slist_lookup: malloc failure\n");
@@ -365,10 +365,10 @@ vtag_comment_count(struct vtag *s, char const *key)
     {
     GSList *slist;
     struct valuestore vs = {0, 0};
-    
+
     if (!(slist = slist_lookup(s, key)))
         return 0;
-    
+
     g_slist_foreach(slist, slist_data_length, &vs);
     return vs.count;
     }
@@ -394,7 +394,7 @@ vtag_lookup(struct vtag *s, char const *key, enum vtag_lookup_mode mode, char *s
         case VLM_MERGE:
             if (!sep)
                 sep = "";
-                
+
             g_slist_foreach(slist, slist_data_length, &vs);
             length = vs.length + (vs.count - 1) * strlen(sep) + 1;
             if (!(value = malloc(length)))
@@ -425,13 +425,13 @@ vtag_append(struct vtag *s, char const *key, char const *value)
 
     if (!key_valid(key, strlen(key)))
             return VE_INVALID_KEY;
-            
+
     if (strlen(value) == 0)
         return VE_MISSING_VALUE;
-        
+
     if (!(lcase_key = strlwr(strdup(key))))
         return VE_ALLOCATION;
-        
+
     if (!(value_copy = strdup(value)))
         return VE_ALLOCATION;
 

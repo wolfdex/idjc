@@ -45,7 +45,7 @@ static void *streamer_main(void *args)
     size_t data_size;
     unsigned connect_time = 0;
     int try_count = 10;
-    
+
     sig_mask_thread();
     while (!self->thread_terminate_f)
         {
@@ -85,7 +85,7 @@ static void *streamer_main(void *args)
                 break;
             case SM_CONNECTED:
                 /* check the connection is still on */
-                
+
                 if ((self->shout_status = shout_get_connected(self->shout)) != SHOUTERR_CONNECTED)
                     {
                     if (self->shout_status == SHOUTERR_RETRY && try_count-- > 0) {
@@ -109,7 +109,7 @@ static void *streamer_main(void *args)
                         if (packet->header.flags & PF_INITIAL)
                             {
                             int br = packet->header.bit_rate;
-                            
+
                             /* determine how much audio to hold in the send buffer */
                             self->max_shout_queue = (shout_buffer_seconds * ((br > 1000) ? br / 1000 : br)) << 7;
                             }
@@ -122,7 +122,7 @@ static void *streamer_main(void *args)
                                 data_size = 0;
                                 fprintf(stderr, "streamer_main: **** packet dumped due to buffer being full ****\n");
                                 }
-#if 1                           
+#if 1
                             switch(shout_send(self->shout, packet->data, data_size))
                                 {
                                 case SHOUTERR_SUCCESS:
@@ -208,7 +208,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
     struct streamer *self = ti->streamer[uv->tab];
     int protocol, data_format = -1, tls;
     char channels[2];
-    char bitrate[4];
+    char bitrate[6];
     char samplerate[6];
     int try_count = 10;
 
@@ -230,7 +230,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
         }
     else
         {
-        const struct encoder_data_format *df = &self->encoder_op->encoder->data_format;            
+        const struct encoder_data_format *df = &self->encoder_op->encoder->data_format;
         int failed = FALSE;
 
         switch (df->family) {
@@ -255,7 +255,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
                         failed = TRUE;
                 }
                 break;
-                
+
             case ENCODER_FAMILY_WEBM:
                 switch (df->codec) {
                     case ENCODER_CODEC_VORBIS:
@@ -266,11 +266,11 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
                         failed = TRUE;
                 }
                 break;
-                
+
             case ENCODER_FAMILY_UNHANDLED:
                 failed = TRUE;
             }
-            
+
         if (failed)
             {
             fprintf(stderr, "streamer_start: unhandled encoder data format\n");
@@ -278,7 +278,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
             return FAILED;
             }
         }
-        
+
     if (!strcmp(sv->server_type, "Shoutcast"))
         protocol = SHOUT_PROTOCOL_ICY;
     else if (!strcmp(sv->server_type, "Icecast 2"))
@@ -424,14 +424,14 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
         goto error;
         }
     #endif
-        
+
     snprintf(channels,   sizeof channels  , "%d",  self->encoder_op->encoder->n_channels);
     {
         int br = self->encoder_op->encoder->bitrate;
-        snprintf(bitrate, sizeof bitrate   , "%d",  ((br < 1000) ? br : br/1000));
+        snprintf(bitrate, sizeof bitrate   , "%hd",  (int16_t)((br < 1000) ? br : br/1000));
     }
     snprintf(samplerate, sizeof samplerate, "%ld", self->encoder_op->encoder->target_samplerate);
-        
+
     if (shout_set_audio_info(self->shout, SHOUT_AI_BITRATE, bitrate) != SHOUTERR_SUCCESS)
         {
         sce("set_audio_info bitrate");
@@ -447,7 +447,7 @@ int streamer_connect(struct threads_info *ti, struct universal_vars *uv, void *o
         sce("set_audio_info channels");
         goto error;
         }
-        
+
     if (shout_set_nonblocking(self->shout, 1) != SHOUTERR_SUCCESS)
         {
         sce("non-blocking");
@@ -502,7 +502,7 @@ int streamer_disconnect(struct threads_info *ti, struct universal_vars *uv, void
 void shout_initialiser()
     {
     int major, minor, patch;
-    
+
     shout_init();
     shout_version(&major, &minor, &patch);
     fprintf(stderr, "libshout-idjc version %d.%d.%d\n", major, minor, patch);
@@ -512,7 +512,7 @@ struct streamer *streamer_init(struct threads_info *ti, int numeric_id)
     {
     struct streamer *self;
     static pthread_once_t once_control = PTHREAD_ONCE_INIT;
-    
+
     pthread_once(&once_control, shout_initialiser);
     if (!(self = calloc(1, sizeof (struct streamer))))
         {
