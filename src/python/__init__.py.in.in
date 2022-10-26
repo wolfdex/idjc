@@ -22,6 +22,7 @@ Generated from file __init__.py.in.in -- edit the original.
 import os
 import gettext
 import ctypes
+import sys
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -119,6 +120,9 @@ def main():
 
     from .prelims import ProfileManager
     ProfileManager()
+
+    print(FGlobs.package_name, FGlobs.package_version)
+    print(sys.implementation.name, sys.version)
 
     from . import maingui
     return maingui.main()

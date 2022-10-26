@@ -1,14 +1,24 @@
 * Changes in version 0.9.2 *
 
-Initial thoughts in {}
+Updated idjcmon.py.
 
-ToDo Simplify the UI for player loudness normalization (ReplayGain). 
-     {Compute the track loudness from track metadata reference and gain values. Currently this is stored in str - change to float forcing
-     a rescan upon user upgrade. Currently the reference values are ignored - yes really.
-     Prefs should have users preferred playback loudness value and use previous X number of tagged tracks to estimate
-     what loudness to assume for untagged files.
-     No separate post-boost values for RG/EBUR128/untagged as at present.
-     }
+Removed (far too strict) restrictions on version of python.
+
+Repaired the ability to install idjcmonitor locally.
+
+Added to spew: idjc and python version info.
+
+Dynamic access of libmpg123 no longer uses the enum API.
+
+Updated internal copies of the mpg123 header file(s).
+
+Fix handling for python argument parser upstream fix.
+
+Fixed regression in import of cue sheets.
+
+Fixed regression in import/export of xspf and m3u playlists.
+
+Fixed regression in import of pls playlists.
 
 * Changes in version 0.9.1 *
 

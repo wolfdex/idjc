@@ -240,11 +240,11 @@ class ArgumentParserImplementation(metaclass=Singleton):
     def parse_args(self):
         try:
             return self._ap.parse_args(self._args)
-        except TypeError as e:
+        except (ArgumentParserError, TypeError) as e:
             try:
                 for cmd in self._sp.choices.keys():
                     if cmd in self._args:
-                        raise
+                        raise ArgumentParserError(e) from e
                 return self._ap.parse_args(self._args + ["run"])
             except ArgumentParserError:
                 self._ap.exit_with_message(str(e))

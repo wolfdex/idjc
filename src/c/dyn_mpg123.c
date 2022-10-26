@@ -1,6 +1,6 @@
 /*
 #   dyn_mpg123.c: dynamic linking for MPG123
-#   Copyright (C) 2009 Stephen Fairchild (s-fairchild@users.sourceforge.net)
+#   Copyright (C) 2009,2021 Stephen Fairchild (s-fairchild@users.sourceforge.net)
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
 
 #include "dyn_mpg123.h"
 
-
+ 
 static void *handle;
 
 static int (*open)(mpg123_handle *, const char *);
@@ -46,7 +46,7 @@ static int (*format)(mpg123_handle *, long, int, int);
 static off_t (*seek)(mpg123_handle *, off_t, int);
 static int (*open_fd)(mpg123_handle *, int);
 static int (*format_none)(mpg123_handle *);
-static int (*param)(mpg123_handle *, enum mpg123_parms, long, double);
+static int (*param)(mpg123_handle *, int, long, double);
 static int (*init)();
 static int (*decode_frame)(mpg123_handle *, off_t *, unsigned char **, size_t *);
 
@@ -76,7 +76,7 @@ int dyn_mpg123_init()
                 (seek = dlsym(handle, "mpg123_seek")) &&
                 (open_fd = dlsym(handle, "mpg123_open_fd")) &&
                 (format_none = dlsym(handle, "mpg123_format_none")) &&
-                (param = dlsym(handle, "mpg123_param")) &&
+                (param = dlsym(handle, "mpg123_param2")) &&
                 (init = dlsym(handle, "mpg123_init")) &&
                 (decode_frame = dlsym(handle, "mpg123_decode_frame"))))
         {
@@ -138,7 +138,7 @@ int mpg123_format_none(mpg123_handle *mh)
     return format_none(mh);
     }
     
-int mpg123_param(mpg123_handle *mh, enum mpg123_parms type, long value, double fvalue)
+int mpg123_param(mpg123_handle *mh, int type, long value, double fvalue)
     {
     return param(mh, type, value, fvalue);
     }

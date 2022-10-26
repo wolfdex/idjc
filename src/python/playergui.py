@@ -30,6 +30,7 @@ import xml.dom.minidom as mdom
 import warnings
 import gettext
 import uuid
+import configparser
 from stat import *
 from collections import deque, namedtuple, defaultdict
 from functools import partial
@@ -139,7 +140,7 @@ class IndexingIterator(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         try:
             val = self.iteree[self.index]
         except IndexError:
@@ -833,14 +834,6 @@ class CueSheet(object):
 
         """
         for i, line in enumerate(iterable):
-            try:
-                line.decode("utf-8")
-            except UnicodeDecodeError:
-                try:
-                    line = line.decode("iso8859-15")
-                except UnicodeDecodeError:
-                    pass
-
             line = line.strip() + " "
             match = cls._quoted(line)
             if match:
@@ -857,7 +850,7 @@ class CueSheet(object):
                     right = [""]
                     quoted = ""
 
-            tokens = filter(lambda x: x, left + [quoted] + right)
+            tokens = list(filter(lambda x: x, left + [quoted] + right))
             yield i + 1, tokens[0].upper(), tokens[1:]
 
     def _parse_REM(self):
@@ -996,12 +989,19 @@ class IDJC_Media_Player(dbus.service.Object):
 
     def make_cuesheet_playlist_entry(self, cue_pathname):
         cuesheet_liststore = CueSheetListStore()
-        try:
-            with open(cue_pathname) as f:
-                segment_data = CueSheet().parse(f)
-        except (IOError, ValueError) as e:
+
+        # Unsure about the wisdom of supporting utf-8 here.
+        for encoding in ("utf-8", "iso-8859-15"):
+            try:
+                with open(cue_pathname, encoding=encoding) as f:
+                    segment_data = CueSheet().parse(f)
+            except (IOError, ValueError) as e:
+                print(e)
+            else:
+                print("cue sheet read successfully with encoding", encoding)
+                break
+        else:
             print("failed reading cue sheet", cue_pathname)
-            print(e)
             return NOTVALID
 
         basepath = os.path.split(cue_pathname)[0]
@@ -1018,50 +1018,49 @@ class IDJC_Media_Player(dbus.service.Object):
                 global_cue_performer = cue_performer
                 global_cue_title = cue_title
             else:
-                for key2, val2 in sorted(val.items()):
-                    if isinstance(key2, int):
-                        index = key2
-                        filename, frames = val2
-                        if filename != oldfilename:
-                            oldfilename = filename
-                            pathname = os.path.join(basepath, filename)
-                            track_data = self.get_media_metadata(pathname)
-                            if track_data:
-                                trackframes = 75 * track_data.length
-                                totalframes += trackframes
-                                replaygain = track_data.replaygain
-                            else:
-                                pathname = ""
-                                trackframes = 0
-                                replaygain = RGDEF
+                for key2, val2 in sorted(x for x in val.items() if isinstance(x[0], int)):
+                    index = key2
+                    filename, frames = val2
+                    if filename != oldfilename:
+                        oldfilename = filename
+                        pathname = os.path.join(basepath, filename)
+                        track_data = self.get_media_metadata(pathname)
+                        if track_data:
+                            trackframes = 75 * track_data.length
+                            totalframes += trackframes
+                            replaygain = track_data.replaygain
+                        else:
+                            pathname = ""
+                            trackframes = 0
+                            replaygain = RGDEF
 
-                        if not cue_performer:
-                            cue_performer = track_data.artist or \
-                                                            global_cue_performer
-                        if not cue_title:
-                            cue_title = track_data.title or global_cue_title
+                    if not cue_performer:
+                        cue_performer = track_data.artist or \
+                                                        global_cue_performer
+                    if not cue_title:
+                        cue_title = track_data.title or global_cue_title
 
+                    try:
+                        nextoffset = val[index + 1][1]
+                    except LookupError:
                         try:
-                            nextoffset = val[index + 1][1]
+                            nextoffset = segment_data[track + 1][0][1]
                         except LookupError:
                             try:
-                                nextoffset = segment_data[track + 1][0][1]
+                                nextoffset = segment_data[track + 1][1][1]
                             except LookupError:
-                                try:
-                                    nextoffset = segment_data[track + 1][1][1]
-                                except LookupError:
-                                    nextoffset = trackframes
+                                nextoffset = trackframes
 
-                        if nextoffset == 0:
-                            nextoffset = trackframes
-                        duration = nextoffset - frames
-                        if not trackframes:
-                            duration = frames = 0
+                    if nextoffset == 0:
+                        nextoffset = trackframes
+                    duration = nextoffset - frames
+                    if not trackframes:
+                        duration = frames = 0
 
-                        element = CueSheetTrack(pathname, bool(pathname), track,
-                                index, cue_performer, cue_title, frames,
-                                duration, replaygain, cue_album)
-                        cuesheet_liststore.append(element)
+                    element = CueSheetTrack(pathname, bool(pathname), track,
+                            index, cue_performer, cue_title, frames,
+                            duration, replaygain, cue_album)
+                    cuesheet_liststore.append(element)
 
         summary = _('%d Audio Tracks') % track
         if global_cue_performer and global_cue_title:
@@ -1999,7 +1998,7 @@ class IDJC_Media_Player(dbus.service.Object):
             timestamped_pathnames = []
             while not timestamped_pathnames:
                 random_pathnames = [PlayerRow(*x).filename 
-                            for x in random.sample(self.liststore, poolsize)]
+                            for x in random.sample(list(self.liststore), poolsize)]
                 timestamped_pathnames = [(fp.get(pn, 0), pn) 
                                             for pn in random_pathnames if pn]
                 timestamped_pathnames.sort()
@@ -2722,10 +2721,10 @@ class IDJC_Media_Player(dbus.service.Object):
 
         print("Chosenfile is", chosenfile)
         try:
-            with open(chosenfile, "w") as h:
+            with open(chosenfile, "wb" if ext in (".m3u", ".xspf") else "w") as h:
                 if ext in (".m3u", ".m3u8"):
                     if ext == ".m3u":
-                        proc = lambda x: x.decode("UTF-8").encode("ISO8859-1", "replace")
+                        proc = lambda x: x.encode("ISO8859-1", "replace")
                     else:
                         proc = lambda x: x
                     self.write_m3u_playlist(h, data, proc)
@@ -2737,10 +2736,10 @@ class IDJC_Media_Player(dbus.service.Object):
             print("problem writing out playlist file")
             
     def write_m3u_playlist(self, h, data, proc):
-        h.write("#EXTM3U\r\n")
+        h.write(proc("#EXTM3U\r\n"))
         for each in data:
-            h.write("#EXTINF:%d,%s\r\n" % (each[2], proc(each[3])))
-            h.write("file://" + urlparse.quote(each[1]) + "\r\n")
+            h.write(proc("#EXTINF:%d,%s\r\n" % (each[2], each[3])))
+            h.write(proc("file://" + urlparse.quote(each[1]) + "\r\n"))
 
     def write_pls_playlist(self, h, data):
         h.write("[playlist]\r\nNumberOfEntries=%d\r\n\r\n" % len(data))
@@ -2813,20 +2812,7 @@ class IDJC_Media_Player(dbus.service.Object):
                 durationText = doc.createTextNode(str(each[2] * 1000))
                 duration.appendChild(durationText)
 
-        xmltext = doc.toxml("UTF-8").replace("><", ">\n<").splitlines()
-        spc = ""
-        for i in range(len(xmltext)):
-            if xmltext[i][1] == "/":
-                spc = spc[2:]
-            if len(xmltext[i]) < 3 or xmltext[i].startswith("<?") or \
-                    xmltext[i][-2] == "/" or xmltext[i].count("<") == 2:
-                xmltext[i] = spc + xmltext[i]
-            else:
-                xmltext[i] = spc + xmltext[i]
-                if xmltext[i][len(spc) + 1] != "/":
-                    spc = spc + "  "
-        h.write("\r\n".join(xmltext))
-        h.write("\r\n")
+        h.write(doc.toprettyxml("  ", "\r\n", "UTF-8"))
         doc.unlink()
 
     def plfile_destroy(self, widget):
@@ -3048,8 +3034,7 @@ class IDJC_Media_Player(dbus.service.Object):
             line += 1
 
     def get_elements_from_pls(self, filename):
-        import ConfigParser
-        cfg = ConfigParser.RawConfigParser()
+        cfg = configparser.RawConfigParser()
         try:
             cfg.readfp(open(filename))
         except IOError:
@@ -3094,7 +3079,7 @@ class IDJC_Media_Player(dbus.service.Object):
                 raise BadXspf
 
             if dom.hasChildNodes() and len(dom.childNodes) == 1 and \
-                                    dom.documentElement.nodeName == u'playlist':
+                                    dom.documentElement.nodeName == 'playlist':
                 playlist = dom.documentElement
             else:
                 raise BadXspf
@@ -3123,8 +3108,8 @@ class IDJC_Media_Player(dbus.service.Object):
                 raise BadXspf
                 
             def append_baseurl(fname):
-                baseurl.append(u"file://" + urlparse.quote(os.path.split(
-                                            fname)[0].decode("ASCII") + u"/"))
+                baseurl.append("file://" + urlparse.quote(os.path.split(
+                                            fname)[0] + "/"))
                 
             for each in (os.path.realpath(filename), filename):
                 append_baseurl(each)
@@ -3147,8 +3132,8 @@ class IDJC_Media_Player(dbus.service.Object):
                 try:
                     for location in locations:
                         for base in baseurl:
-                            url = urlparse.unquote(urlparse.basejoin(base, 
-                                location.firstChild.wholeText).encode("ASCII"))
+                            url = urlparse.unquote(urlparse.urljoin(base, 
+                                location.firstChild.wholeText))
                             meta = self.get_media_metadata(url)
                             if meta:
                                 yield meta

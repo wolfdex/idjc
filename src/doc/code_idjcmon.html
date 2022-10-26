@@ -95,44 +95,40 @@ ui('Extra code: An IDJC monitoring class', 'code-idjcmon-nav')
 
 <p>With a little work this could be made to interface with your station's web page or with cloud services.</p>
 
-<pre>#! /usr/bin/python3
+<pre>#! /usr/bin/env python3
 
-"""idjcmon3.py demo code for Python3
+"""idjcmon.py demo code
 
-This can be extended to issue e-mail alerts if IDJC freezes or perform Twitter
-updates when the music changes.
+This could be extended to add features to IDJC without modifying the
+main source code.
 
-Requires IDJC 0.8.11 or higher.
 Takes the profile you wish to monitor as the command line parameter.
 """
 
 import sys
 
-from gi.repository import GObject
+import gi
+gi.require_version("GLib", "2.0")
 from gi.repository import GLib
-from idjcmonitor import *
+import idjcmonitor
+
 
 def launch_handler(monitor, profile, pid):
-    print(f"Hello to IDJC '{profile}' with process ID {pid}.")
+    print(f"Hello to IDJC {profile} with process ID {pid}.")
 
 def quit_handler(monitor, profile, pid):
-    print(f"Goodbye to IDJC '{profile}' with process ID {pid}.")
+    print(f"Goodbye to IDJC {profile} with process ID {pid}.")
 
 def streamstate_handler(monitor, which, state, where):
-    print(f"Stream {which} is {('down', 'up')[state]} on connection {where}.")
+    print(f"Stream {which} is {('down', 'up')[state]} "
+          f"on connection {where}.")
 
-def recordstate_handler(monitor, which, state, where):
-    print(f"Recording of {which} has {('stopped', 'started')[state]}"
-          f" to {where}")
-
-def metadata_handler(monitor, artist, title, album, songname,
-                                                        music_filename):
-    print(f"Metadata is: artist: {artist}, title: {title},"
-          f" album: {album}, filename: {music_filename}")
+def metadata_handler(monitor, artist, title, album, songname, filename):
+    print(f"Metadata is: {artist=}, {title=}, {album=}, {filename=}")
 
 def frozen_handler(monitor, profile, pid, frozen):
-    print(f"IDJC '{profile}' with process ID {pid} "
-          f"is {('no longer frozen', 'frozen')[frozen]}")
+    print(f"IDJC {profile} with process ID {pid} is "
+          f"{('running', 'stopped or frozen ')[frozen]}")
 
 def effect_started_handler(monitor, title, pathname, player):
     print(f"Effect player {player} is playing {title}")
@@ -145,11 +141,10 @@ try:
 except IndexError:
     profile = "default"
 
-monitor = IDJCMonitor(profile)
+monitor = idjcmonitor.IDJCMonitor(profile)
 monitor.connect("launch", launch_handler)
 monitor.connect("quit", quit_handler)
 monitor.connect("streamstate-changed", streamstate_handler)
-monitor.connect("recordstate-changed", recordstate_handler)
 monitor.connect("metadata-changed", metadata_handler)
 monitor.connect("frozen", frozen_handler)
 monitor.connect("effect-started", effect_started_handler)

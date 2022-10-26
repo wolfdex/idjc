@@ -20,9 +20,9 @@ idjc_la_SOURCES = agc.c agc.h audio_feed.c audio_feed.h avcodecdecode.c avcodecd
 			\
 				speextag.h streamer.c streamer.h xlplayer.c xlplayer.h live_mp2_encoder.c live_mp2_encoder.h			\
 			\
-				live_aac_encoder.c live_aac_encoder.h smoothing.c smoothing.h dyn_mpg123.c dyn_mpg123.h mpg123.h			\
+				live_aac_encoder.c live_aac_encoder.h smoothing.c smoothing.h dyn_mpg123.c dyn_mpg123.h mpg123.h		\
 			\
-				ogg_opus_dec.c ogg_opus_dec.h vorbistagparse.c vorbistagparse.h live_oggopus_encoder.c					\
+				fmt123.h ogg_opus_dec.c ogg_opus_dec.h vorbistagparse.c vorbistagparse.h live_oggopus_encoder.c			\
 			\
 				live_oggopus_encoder.h live_webm_encoder.c live_webm_encoder.h
 
