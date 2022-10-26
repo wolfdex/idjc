@@ -19,8 +19,6 @@ But strictly no third party module dependencies.
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 __all__ = ["Singleton", "PolicedAttributes", "FixedAttributes",
                 "PathStr", "SlotObject", "string_multireplace"]
 

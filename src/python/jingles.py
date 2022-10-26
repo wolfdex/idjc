@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 import os
 import time
 import gettext
@@ -74,7 +72,7 @@ class Effect(Gtk.HBox):
         self.set_border_width(2)
         self.set_spacing(3)
         
-        label = Gtk.Label(f"{num + 1:02d}")
+        label = Gtk.Label("{:02d}".format(num + 1))
         self.pack_start(label, False)
         
         self.clear = LED["clear"].copy()
@@ -232,19 +230,18 @@ class Effect(Gtk.HBox):
                 self.tabeffectname.set_text(self.trigger_label.get_text())
                 self.tabeffecttime.set_text('0.0')
                 self.tabeffectprog.set_fraction(0.0)
-                self.approot.jingles.nb_effects_box.pack_start(self.tabwidget)
-                self.approot.jingles.nb_effects_box.show_all()
+                self.approot.jingles.nb_effects_box.add(self.tabwidget)
                 self.approot.effect_started(self.trigger_label.get_text(),
                                             self.pathname, self.num)
             else: # Restarted the effect
                 self.effect_start = time.time()
             self.approot.mixer_write(
-                f"EFCT={self.num}\nPLRP={self.pathname}\n"
-                f"RGDB={self.level}\nACTN=playeffect\nend\n")
+                "EFCT={}\nPLRP={}\n"
+                "RGDB={}\nACTN=playeffect\nend\n".format(self.num, self.pathname, self.level))
 
     def _on_stop(self, widget):
         self._repeat_works = False
-        self.approot.mixer_write(f"EFCT={self.num}\nACTN=stopeffect\nend\n")
+        self.approot.mixer_write("EFCT={}\nACTN=stopeffect\nend\n".format(self.num))
 
     @threadslock
     def _progress_timeout(self):
@@ -257,7 +254,7 @@ class Effect(Gtk.HBox):
         else:
             self.progress.set_fraction(ratio)
             self.tabeffectprog.set_fraction(ratio)
-            self.tabeffecttime.set_text(f"{self.effect_length - played:4.1f}")
+            self.tabeffecttime.set_text("{:4.1f}".format(self.effect_length - played))
         return True
 
     def _stop_progress(self):
@@ -332,7 +329,7 @@ class Effect(Gtk.HBox):
 
             if self.trigger_label.get_use_markup():
                 if val:
-                    self.trigger_label.set_label(f"<b>{self.trigger_label.get_text()}</b>")
+                    self.trigger_label.set_label("<b>{}</b>".format(self.trigger_label.get_text()))
                 else:
                     self.trigger_label.set_label(self.trigger_label.get_text())
 
@@ -348,7 +345,7 @@ class EffectConfigDialog(Gtk.FileChooserDialog):
             file_filter.add_pattern("*" + each.upper())
     
     def __init__(self, effect, window):
-        Gtk.FileChooserDialog.__init__(self, _(f'Effect {effect.num + 1} Config'),
+        Gtk.FileChooserDialog.__init__(self, _('Effect {} Config'.format(effect.num + 1)),
                             window,
                             buttons=(Gtk.STOCK_CLEAR, Gtk.ResponseType.NO,
                             Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
@@ -499,7 +496,7 @@ class EffectBank(Gtk.Frame):
 
 class LabelSubst(Gtk.Frame):
     def __init__(self, heading):
-        Gtk.Frame.__init__(self, f" {heading} ")
+        Gtk.Frame.__init__(self, " {} ".format(heading))
         self.vbox = Gtk.VBox()
         self.vbox.set_border_width(2)
         self.vbox.set_spacing(2)
@@ -508,7 +505,7 @@ class LabelSubst(Gtk.Frame):
         self.activedict = {}
 
     def add_widget(self, widget, ui_name, default_text):
-        frame = Gtk.Frame(f" {default_text} ")
+        frame = Gtk.Frame(" {} ".format(default_text))
         frame.set_label_align(0.5, 0.5)
         frame.set_border_width(3)
         self.vbox.pack_start(frame)
@@ -529,7 +526,7 @@ class LabelSubst(Gtk.Frame):
             def set_text(new_text):
                 new_text = new_text.strip()
                 if new_text:
-                    new_text = f" {new_text} "
+                    new_text = " {} ".format(new_text)
                 widget.set_label(new_text or None)
             widget.set_text = set_text
 
@@ -570,6 +567,8 @@ class ExtraPlayers(Gtk.HBox):
         vb.show()
         self.nb_label.pack_start(vb)
         self.nb_effects_box = Gtk.HBox(False, 5)
+        self.nb_effects_box.connect("add", self._on_nb_add, parent.player_nb)
+        self.nb_effects_box.connect("remove", self._on_nb_remove)
         self.nb_label.pack_start(self.nb_effects_box)
         self.nb_label.show_all()
         self.nb_effects_box.hide()
@@ -605,10 +604,10 @@ class ExtraPlayers(Gtk.HBox):
         self.effect_banks = []
         for col in range(effect_cols):
             bank = EffectBank(min(effects - base, max_rows), base,
-            f"effects{col + 1}_session", parent, self.all_effects,
+            "effects{}_session".format(col + 1), parent, self.all_effects,
             self.jvol_adj[col], self.jmute_adj[col])
             parent.label_subst.add_widget(bank, 
-                            f"effectbank{col}", _(f'Effects {col + 1}'))
+                            "effectbank{}".format(col), _('Effects {}'.format(col + 1)))
             self.effect_banks.append(bank)
             effects_hbox.pack_start(bank)
             base += max_rows
@@ -644,11 +643,20 @@ class ExtraPlayers(Gtk.HBox):
                                        self._on_nb_switch_page,
                                        self.nb_effects_box)
 
+    def _on_nb_add(self, container, child, notebook):
+        page_widget = notebook.get_nth_page(notebook.get_current_page())
+        if not isinstance(page_widget, ExtraPlayers):
+            container.show()
+
+    def _on_nb_remove(self, container, child):
+        if not container.get_children():
+            container.hide()
+
     def _on_nb_switch_page(self, notebook, page, page_num, box):
         page_widget = notebook.get_nth_page(page_num)
         if isinstance(page_widget, ExtraPlayers):
             box.hide()
-        else:
+        elif box.get_children():
             box.show()
 
     def restore_session(self):

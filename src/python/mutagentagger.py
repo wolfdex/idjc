@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 __all__ = ['MutagenGUI']
 
 import os
@@ -145,11 +143,11 @@ class WMATagger(MutagenTagger):
                 val = val.strip()
                 if val:
                     try:
-                        tag[key] += [ASFUnicodeAttribute(val.decode("utf-8"))]
+                        tag[key] += [ASFUnicodeAttribute(val)]
                     except (KeyError, AttributeError):
                         try:
                             tag[key] = [
-                                    ASFUnicodeAttribute(val.decode("utf-8"))]
+                                    ASFUnicodeAttribute(val)]
                         except KeyError:
                             print("Unacceptable key", key)
         try:
@@ -168,22 +166,20 @@ class WMATagger(MutagenTagger):
             except KeyError:
                 pass
             else:
-                each[1].set_text("/".join(unicode(y) for y in data))
+                each[1].set_text("/".join(y.value for y in data))
 
         additional = []
 
         for key in self.secondaries:
             values = tag.get(key, [ASFUnicodeAttribute("")])
             for val in values:
-                additional.append(key.encode("utf-8") + "=" + unicode(
-                                                        val).encode("utf-8"))
+                additional.append(f"{key}={val}")
 
         for key in self.text_set:
             if key not in self.primary_data and key not in self.secondaries:
                 values = tag[key]
                 for val in values:
-                    additional.append(key.encode("utf-8") + "=" + unicode(
-                                                        val).encode("utf-8"))
+                    additional.append(f"{key}={val}")
         
         self.tag_frame.tb.set_text("\n".join(additional))
     
@@ -223,7 +219,7 @@ class WMATagger(MutagenTagger):
 
         for key, val in self.tag.items():
             if key not in self.primary_line and all(isinstance(v, (
-                                ASFUnicodeAttribute, unicode)) for v in val):
+                                ASFUnicodeAttribute, str)) for v in val):
                 self.text_set.append(key)
 
 
@@ -241,9 +237,8 @@ class ID3Tagger(MutagenTagger):
         tag = self.tag
         
         # Remove all text tags.
-        for fid in tag.keys():
-            if fid[0] == "T":
-                del tag[fid]
+        for fid in [fid for fid in tag if fid[0] == 'T']:
+            del tag[fid]
     
         # Add the primary tags.
         for fid, entry in self.primary_line:
@@ -264,7 +259,7 @@ class ID3Tagger(MutagenTagger):
                 continue
             
             fid = fid.strip()
-            val = val.strip().decode("utf-8")
+            val = val.strip()
             
             try:
                 frame = id3.Frames[fid]
@@ -314,7 +309,7 @@ class ID3Tagger(MutagenTagger):
                         # Handle occurrence of ID3Timestamp.
                         entry.set_text(str(frame.text[0]))
                     for each in frame.text[1:]:
-                        additional.append(fid + ":" + each.encode("utf-8"))
+                        additional.append(f"{fid}:{each}")
             except KeyError:
                 entry.set_text("")
             
@@ -324,7 +319,8 @@ class ID3Tagger(MutagenTagger):
             if fid[0] == "T" and fid not in done:
                 sep = "=" if fid.startswith("TXXX:") else ":"
                 for text in frame.text:
-                    additional.append(fid + sep + text.encode("utf-8"))
+                    additional.append(f"{fid}{sep}"
+                                      f"{text if type(text) is str else text.text}")
                 
         self.tag_frame.tb.set_text("\n".join(additional))
         
@@ -486,10 +482,9 @@ class NativeTagger(MutagenTagger):
         """Updates the tag with the GUI data."""
         
         tag = self.tag
-        
-        for key in tag.keys():
-            if key not in self.blacklist:
-                del tag[key]
+
+        for key in [key for key in tag if key not in self.blacklist]:
+            del tag[key]
                 
         tb = self.tag_frame.tb
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
@@ -504,10 +499,10 @@ class NativeTagger(MutagenTagger):
                 val = val.strip()
                 if key not in self.blacklist and val:
                     try:
-                        tag[key] += [val.decode("utf-8")]
+                        tag[key] += [val]
                     except (KeyError, AttributeError):
                         try:
-                            tag[key] = [val.decode("utf-8")]
+                            tag[key] = [val]
                         except KeyError:
                             print("Unacceptable key", key)
     
@@ -527,15 +522,15 @@ class NativeTagger(MutagenTagger):
             try:
                 values = tag[key]
             except KeyError:
-                lines.append(key + "=")
+                lines.append(f"{key}=")
             else:
                 for val in values:
-                    lines.append(key + "=" + val.encode("utf-8"))
+                    lines.append(f"{key}={val}")
 
         for key, values in tag.items():
             if key not in primaries and key not in self.blacklist:
                 for val in values:
-                    lines.append(key + "=" + val.encode("utf-8"))
+                    lines.append(f"{key}={val}")
                 
         self.tag_frame.tb.set_text("\n".join(lines))
     
@@ -563,10 +558,9 @@ class ApeTagger(MutagenTagger):
         """Updates the tag with the GUI data."""
         
         tag = self.tag
-        
-        for key, values in tag.items():
-            if isinstance(values, APETextValue):
-                del tag[key]
+
+        for k in [k for k, v in tag.items() if isinstance(v, APETextValue)]:
+            del tag[k]
                 
         tb = self.tag_frame.tb
         lines = tb.get_text(tb.get_start_iter(), tb.get_end_iter(), False).splitlines()
@@ -581,10 +575,10 @@ class ApeTagger(MutagenTagger):
                 val = val.strip()
                 if val:
                     try:
-                        tag[key].value += "\0" + val.decode("utf-8")
+                        tag[key].value += "\0" + val
                     except (KeyError, AttributeError):
                         try:
-                            tag[key] = APETextValue(val.decode("utf-8"), 0)
+                            tag[key] = APETextValue(val, 0)
                         except KeyError:
                             print("Unacceptable key", key)
     
@@ -605,15 +599,15 @@ class ApeTagger(MutagenTagger):
             try:
                 values = tag[key]
             except KeyError:
-                lines.append(key + "=")
+                lines.append(f"{key}=")
             else:
                 for val in values:
-                    lines.append(key + "=" + val.encode("utf-8"))
+                    lines.append(f"{key}={val}")
 
         for key, values in tag.items():
             if key not in primaries and isinstance(values, APETextValue):
                 for val in values:
-                    lines.append(key + "=" + val.encode("utf-8"))
+                    lines.append(f"{key}={val}")
                 
         self.tag_frame.tb.set_text("\n".join(lines))
 
@@ -707,19 +701,9 @@ class MutagenGUI:
         self.window.add(vbox)
         vbox.show()
         label = Gtk.Label()
-        if idjcroot:
-            if encoding is not None:
-                label.set_markup(u"<b>" + _('Filename:').decode("utf-8") + \
-                u" " + GLib.markup_escape_text(unicode(os.path.split(
-                pathname)[1], encoding).encode("utf-8", "replace")) + u"</b>")
-            else:
-                label.set_markup(u"<b>" + _('Filename:').decode("utf-8") + \
-                u" " + GLib.markup_escape_text(os.path.split(
-                pathname)[1]).encode("utf-8", "replace") + u"</b>")
-        else:
-            label.set_markup(u"<b>" + _('Filename:').decode("utf-8") + u" " + \
-            GLib.markup_escape_text(unicode(os.path.split(
-            pathname)[1], "latin1").encode("utf-8", "replace")) + u"</b>")
+        label.set_markup("<b>" + _('Filename:') + " " + \
+                         GLib.markup_escape_text(os.path.split(
+                             pathname)[1]) + "</b>")
         vbox.pack_start(label, False, False, 6)
         label.show()
         

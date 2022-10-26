@@ -309,7 +309,7 @@ class IDJCMonitor(GObject.Object):
         def update_property(name, value):
             oldvalue = getattr(self, f"_IDJCMonitor__{name}")
             if value != oldvalue:
-                setattr(self, f"_IDJCMonitor__{name}{value}")
+                setattr(self, f"_IDJCMonitor__{name}", value)
                 self.notify(name)
 
         names = "artist title album songname music_filename".split()
@@ -353,7 +353,7 @@ class IDJCMonitor(GObject.Object):
         elif name == "voip-mode":
             return self.__voip_mode
         else:
-            raise AttributeError(f"Unknown property {name} in {self!r}")
+            raise AttributeError("Unknown property {} in {!r}".format(name, self))
 
     def notify(self, property_name):
         if not self.__shutdown:

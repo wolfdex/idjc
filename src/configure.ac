@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([idjc], [0.9.0], [http://idjc.sourceforge.net])
+AC_INIT([idjc], [0.9.1], [http://idjc.sourceforge.net])
 AC_SUBST(COPYRIGHT_YEAR, [2021])
 AC_CANONICAL_SYSTEM
 AC_CONFIG_SRCDIR([config.h.in])
@@ -23,7 +23,7 @@ AM_PROG_CC_C_O
 
 # Cause autoconfiguration to look for an external libintl.
 AM_GNU_GETTEXT([external])
-AM_GNU_GETTEXT_VERSION([0.18.1])
+AM_GNU_GETTEXT_VERSION([0.18])
 
 # We need libjack in order to compile.
 PKG_CHECK_MODULES(LIBJACK, [jack >= 0.98.0])
@@ -292,7 +292,7 @@ AC_SUBST(EXT,[png])
 
 PKG_CHECK_MODULES([SHOUTIDJC], [shout-idjc])
 AC_CHECK_HEADERS([shoutidjc/shout.h])
-AC_CHECK_LIB([shout-idjc], [shout_set_content_format], :, AC_MSG_ERROR([required function not detected]))
+#AC_CHECK_LIB([shout-idjc], [shout_set_content_format], :, AC_MSG_ERROR([required function not detected]))
 AC_CHECK_LIB([shout-idjc], [shout_set_tls], AC_SUBST(HAVE_SHOUT_TLS, 1), AC_SUBST(HAVE_SHOUT_TLS, 0))
 
 if test x$DYNAMIC = "x1" ; then

@@ -206,7 +206,7 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/config.h.in \
 	$(srcdir)/idjc.appdata.xml.in.in $(srcdir)/idjc.desktop.in.in \
 	$(srcdir)/idjc.in.in ABOUT-NLS AUTHORS COPYING ChangeLog \
 	INSTALL NEWS README compile config.guess config.rpath \
-	config.sub install-sh ltmain.sh missing py-compile
+	config.sub install-sh ltmain.sh missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)

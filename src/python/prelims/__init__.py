@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 __all__ = ["ArgumentParserImplementation", "ProfileManager"]
 
 import os

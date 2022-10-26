@@ -1,3 +1,33 @@
+* Changes in version 0.9.2 *
+
+Initial thoughts in {}
+
+ToDo Simplify the UI for player loudness normalization (ReplayGain). 
+     {Compute the track loudness from track metadata reference and gain values. Currently this is stored in str - change to float forcing
+     a rescan upon user upgrade. Currently the reference values are ignored - yes really.
+     Prefs should have users preferred playback loudness value and use previous X number of tagged tracks to estimate
+     what loudness to assume for untagged files.
+     No separate post-boost values for RG/EBUR128/untagged as at present.
+     }
+
+* Changes in version 0.9.1 *
+
+Reverted libshout dependency check to allow use of libshout-idjc version 2.4.3.
+
+History window size can now be adjusted in preferences.
+
+Fixed Effects tab display.
+
+Converted f-strings to str.format() in order to fix multiple i18n issues.
+
+Fixed syntax error in sourceclientgui.py line 1451 found by f2format.
+
+Fixed unwanted 'not valid' playlist entries.
+
+Fixed addition of wma files.
+
+Code cleanup of __future__ imports.
+
 * Changes in version 0.9.0 *
 
 Added support for Python3 provided by B.Millham.
@@ -6,7 +36,7 @@ Updated libshout requirement for libshout-idjc 2.4.5
 
 Added check for shout_set_content_format in libshout-idjc.
 
-* Changes in version 0.8.18 *
+* Changes in version 0.8.18 (not released) *
 
 Removed obsolete PyGTK build time check.
 

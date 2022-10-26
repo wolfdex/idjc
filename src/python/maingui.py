@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-     
 import os
 import sys
 import fcntl
@@ -1921,11 +1919,11 @@ class MainWindow(dbus.service.Object):
     def set_track_metadata(self, artist, title, album, songname, filename, log):
         args = artist, title, album, songname, filename
 
-        self.window.set_title(f"{songname} :: IDJC{pm.title_extra}")
+        self.window.set_title("{} :: IDJC{}".format(songname, pm.title_extra))
 
         if log:
             tm = time.localtime()
-            ts = f"{tm[3]:02d}:{tm[4]:02d} :: "  # hours and minutes
+            ts = "{:02d}:{:02d} :: ".format(tm[3], tm[4])  # hours and minutes
             self.history_buffer.place_cursor(
                                         self.history_buffer.get_end_iter())
             self.history_buffer.insert_at_cursor(ts + songname + "\n")
@@ -2002,7 +2000,7 @@ class MainWindow(dbus.service.Object):
         if infotype == 1:
             def fmt(artist, title, album):
                 o, c = ("[", "]") if "(" in album or ")" in album else ("(", ")")
-                return f"{artist} - {title} - {o}{album}{c}"
+                return "{} - {} - {}{}{}".format(artist, title, o, album, c)
             
             if not album and not artist:
                 sep = title.count(" - ")
@@ -2305,7 +2303,7 @@ class MainWindow(dbus.service.Object):
             print("Error writing out main session data", e)
 
         try:
-            fh = open(f"{session_filename}_tracks", "w")
+            fh = open("{}_tracks".format(session_filename), "w")
             start, end = self.history_buffer.get_bounds()
             text = self.history_buffer.get_text(start, end, True)
             fh.write(text)
@@ -3044,9 +3042,18 @@ class MainWindow(dbus.service.Object):
         
         self.hbox7.show()
         self.hbox10.show()
-        
+
+        self.grid1 = Gtk.Grid()
+        self.grid1.set_row_homogeneous(True)
+        self.grid1.set_column_homogeneous(True)
+
+        vbox2 = Gtk.VBox(False, 0)
+        self.grid1.attach(vbox2, 0, 0, 1, 16)
+        vbox2.show()
         self.hbox4 = Gtk.HBox(False, 0)
-        self.vbox6.pack_start(self.hbox4, True, True, 0)
+        vbox2.pack_start(self.hbox4, True, True, 0)
+        self.vbox6.pack_start(self.grid1, True, True, 0)
+        self.grid1.show()
         
         # Boxes 3L and 3R contain our media players
         self.vbox3L = Gtk.VBox(False, 0)
@@ -3171,13 +3178,13 @@ class MainWindow(dbus.service.Object):
         history_expander_hbox.pack_start(self.history_expander, True, True, 6)
         self.history_expander.connect("notify::expanded", self.expandercallback)
         self.history_expander.show()
-        self.vbox6.pack_start(history_expander_hbox, False, False, 0)
+        vbox2.pack_start(history_expander_hbox, False, False, 0)
         history_expander_hbox.show()
         
         self.history_vbox = Gtk.VBox()
         history_hbox = Gtk.HBox()
         self.history_vbox.pack_start(history_hbox, True, True, 0)
-        self.vbox6.pack_start(self.history_vbox, True, True, 0)
+        self.grid1.attach(self.history_vbox, 0, 16, 1, 5)
         history_hbox.show()
         history_frame = Gtk.Frame()
         history_hbox.pack_start(history_frame, True, True, 6)
@@ -3187,7 +3194,7 @@ class MainWindow(dbus.service.Object):
         history_frame.add(self.history_window)
         self.history_window.set_border_width(4)
         self.history_window.show()
-        self.history_window.set_size_request(-1, 81)
+        self.history_window.set_size_request(-1, 10)
         self.history_window.set_shadow_type(Gtk.ShadowType.IN)
         self.history_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.ALWAYS)
         
@@ -3204,8 +3211,7 @@ class MainWindow(dbus.service.Object):
         spacer.show()
         
         self.history_textview = Gtk.TextView()
-        self.history_textview.connect(
-                                    "populate-popup", self.cb_history_populate)
+        self.history_textview.connect("populate-popup", self.cb_history_populate)
         self.history_window.add(self.history_textview)
         self.history_textview.show()
         self.history_textview.set_cursor_visible(False)

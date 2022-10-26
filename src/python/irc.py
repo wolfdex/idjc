@@ -183,7 +183,7 @@ class IRCEntry(Gtk.Entry):  # pylint: disable=R0904
         """Adder for menuitems that choose text colour."""
 
         for lower, upper in ((0, 7), (8, 15)):
-            menuitem = Gtk.MenuItem(f"{_('Colours')} {lower}-{upper}")
+            menuitem = Gtk.MenuItem("{} {}-{}".format(_('Colours'), lower, upper))
             submenu.append(menuitem)
             colourmenu = Gtk.Menu()
             menuitem.set_submenu(colourmenu)
@@ -201,7 +201,7 @@ class IRCEntry(Gtk.Entry):  # pylint: disable=R0904
 
                 label = Gtk.Label()
                 label.set_alignment(0, 0.5)
-                label.set_markup(f"<span font_family='monospace'>{i:02d}</span>")
+                label.set_markup("<span font_family='monospace'>{:02d}</span>".format(i))
                 hbox.pack_start(label)
                 label.show()
 
@@ -237,10 +237,10 @@ class IRCEntry(Gtk.Entry):  # pylint: disable=R0904
         cursor = entry.get_position()
         if cursor < 3 or entry.get_text()[cursor - 3] !="\x03":
             # Foreground colour.
-            entry.insert_text(f"\u0003{code:02d}", cursor)
+            entry.insert_text("\u0003{:02d}".format(code), cursor)
         else:
             # Background colour.
-            entry.insert_text(f",{code:02d}", cursor)
+            entry.insert_text(",{:02d}".format(code), cursor)
         entry.set_position(cursor + 3)
 
     @staticmethod
@@ -270,7 +270,7 @@ class IRCView(Gtk.TextView):
         ("text", "[^\x00-\x1F]*"),
         ))
 
-    readable_equiv = tuple((x, f"<{y}>") for x, y in CODES_AND_DESCRIPTIONS)
+    readable_equiv = tuple((x, "<{}>".format(y)) for x, y in CODES_AND_DESCRIPTIONS)
 
     def __init__(self):
         Gtk.TextView.__init__(self)
@@ -316,7 +316,7 @@ class IRCView(Gtk.TextView):
 
         rgb = red, green, blue as a 2 digit hex number."""
 
-        return f"#{(XCHAT_COLOR[int(code)] >> 8):06X}"
+        return "#{:06X}".format((XCHAT_COLOR[int(code)] >> 8))
 
     def _handle_bold(self):
         """Bold toggle."""
@@ -1051,9 +1051,9 @@ class IRCPane(Gtk.VBox):
             if row.type == 1:
                 if row.nick:
                     text = row.nick + "@"
-                text += f"{row.hostname}:{row.port}"
+                text += "{}:{}".format(row.hostname, row.port)
                 if row.network:
-                    text += f"({row.network})"
+                    text += "({})".format(row.network)
 
                 opt = []
                 if row.password:
@@ -1066,7 +1066,7 @@ class IRCPane(Gtk.VBox):
                     # TC: Indicator text: Server connection started manually.
                     opt.append(_("MANUAL"))
                 if opt:
-                    text += f" {', '.join(opt)}"
+                    text += " {}".format(', '.join(opt))
             else:
                 channels = row.channels
 
@@ -1074,11 +1074,11 @@ class IRCPane(Gtk.VBox):
                     message = row.message
 
                     if row.type == 3:
-                        text = f"+{row.delay};{channels}; {message}"
+                        text = "+{};{}; {}".format(row.delay, channels, message)
                     elif row.type == 5:
-                        text = f"{row.offset}/{row.interval};{channels}; {message}"
+                        text = "{}/{};{}; {}".format(row.offset, row.interval, channels, message)
                     elif row.type in (7, 9):
-                        text = f"{channels}; {message}"
+                        text = "{}; {}".format(channels, message)
                 elif row.type == 11:
                     text = channels
         else:
@@ -1367,8 +1367,8 @@ class IRCConnection(threading.Thread):
                         if not ref.valid() or not model.path_is_active(path):
                             print("IRC connection attempt cancelled")
                             return
-                        print((f"Attempting to connect to IRC server {hostname}:{port}"
-                               f"{' no more retries' if not delays else ''}"))
+                        print(("Attempting to connect to IRC server {}:{}"
+                               "{}".format(hostname, port, ' no more retries' if not delays else '')))
                         try:
                             connect()
                         except client.ServerConnectionError as e:
@@ -1381,7 +1381,7 @@ class IRCConnection(threading.Thread):
                                 self.server.reactor.scheduler.execute_after(delay, partial(try_connect, delays[1:]))
                         else:
                             self._ui_set_nick(nickname)
-                            print(f"New IRC connection: {nickname}@{hostname}:{port}")
+                            print("New IRC connection: {}@{}:{}".format(nickname, hostname, port))
                     try_connect(delays=(1, 2, 3))
             else:
                 def deferred():
@@ -1475,8 +1475,8 @@ class IRCConnection(threading.Thread):
     def _nick_recover(self, server, target, nspw):
         print("Will issue recover and release commands to NickServ")
         for i, (func, args) in enumerate((
-                (server.privmsg, ("NickServ", f"RECOVER {target} {nspw}")),
-                (server.privmsg, ("NickServ", f"RELEASE {target} {nspw}")),
+                (server.privmsg, ("NickServ", "RECOVER {} {}".format(target, nspw))),
+                (server.privmsg, ("NickServ", "RELEASE {} {}".format(target, nspw))),
                 (server.nick, (target,))), start=1):
             server.reactor.scheduler.execute_after(i, partial(func, *args))
 
@@ -1486,14 +1486,14 @@ class IRCConnection(threading.Thread):
             source = source.split("@")[0]
 
             if source != "Global!services":
-                print(f"-{source}- {event.arguments[0]}")
+                print("-{}- {}".format(source, event.arguments[0]))
 
             if source == "NickServ!services":
                 with gdklock():
                     nspw = self.get_model()[self.get_path()].nickserv
 
                 if "NickServ IDENTIFY" in event.arguments[0] and nspw:
-                    server.privmsg("NickServ", f"IDENTIFY {nspw}")
+                    server.privmsg("NickServ", "IDENTIFY {}".format(nspw))
                     print("Issued IDENTIFY command to NickServ")
                     self._ui_set_nick(event.target)
                 elif "Guest" in event.arguments[0]:
@@ -1536,7 +1536,7 @@ class IRCConnection(threading.Thread):
                                             "PLAYED STREAMSTATUS KILLSTREAM")
 
         elif args == ["VERSION"]:
-            reply(f"VERSION {FGlobs.package_name} {FGlobs.package_version} (python-irc)")
+            reply("VERSION {} {} (python-irc)".format(FGlobs.package_name, FGlobs.package_version))
         elif args == ["TIME"]:
             reply("TIME " + time.ctime())
 
@@ -1553,8 +1553,8 @@ class IRCConnection(threading.Thread):
 
             for i, each in enumerate(show, start=1):
                 age = int((t - each[1]) // 60)
-                message = (f"PLAYED \x0304{each[0]}\x0f, \x0306{age} "
-                           f"minute{'' if age == 1 else 's'} ago\x0f.")
+                message = ("PLAYED \x0304{}\x0f, \x0306{} "
+                           "minute{} ago\x0f.".format(each[0], age, '' if age == 1 else 's'))
                 server.reactor.scheduler.execute_after(i, partial(reply, message))
 
             if not show:
@@ -1564,7 +1564,7 @@ class IRCConnection(threading.Thread):
                                                        partial(reply, "PLAYED End of list."))
 
         elif args == ["STREAMSTATUS"]:
-            reply(f"STREAMSTATUS The stream is {'up' if self._stream_active else 'down'}")
+            reply("STREAMSTATUS The stream is {}".format('up' if self._stream_active else 'down'))
 
         elif args == ["KILLSTREAM"]:
             reply("KILLSTREAM This feature was added as a joke.")
@@ -1687,7 +1687,7 @@ class MessageHandler(GObject.GObject):
         if prop.name == 'channels':
             return self._channels
         else:
-            raise AttributeError(f"unknown property '{prop.name}'")
+            raise AttributeError("unknown property '{}'".format(prop.name))
 
     def issue_messages(self, delay_calc=lambda row: 0, forced_message=None):
         model = self.tree_row_ref.get_model()

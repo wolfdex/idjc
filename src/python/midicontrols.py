@@ -264,25 +264,25 @@ class Binding(tuple):
             binding = list(cls._default)
             s = input_part[:1]
             if s not in Binding.SOURCES:
-                raise ValueError(f'Unknown binding source {input_part[0]}')
+                raise ValueError('Unknown binding source {}'.format(input_part[0]))
             binding[0]= s
             ch, _, inp = input_part[1:].partition('.')
             binding[1]= int(ch, 16)
             binding[2]= int(inp, 16)
             m = action_part[:1]
             if m not in Binding.MODES:
-                raise ValueError(f'Unknown mode {m}')
+                raise ValueError('Unknown mode {}'.format(m))
             binding[3]= m
             parts = action_part[1:].split('.', 3)
             if len(parts)!=3:
-                raise ValueError(f'Malformed control string {action_part}')
+                raise ValueError('Malformed control string {}'.format(action_part))
             if parts[0] not in Binding.METHODS:
-                raise ValueError(f'Unknown method {parts[0]}')
+                raise ValueError('Unknown method {}'.format(parts[0]))
             binding[4]= parts[0]
             binding[5]= int(parts[1], 16)
             binding[6]= int(parts[2])
         else:
-            raise ValueError(f'Expected string or Binding, not {binding}')
+            raise ValueError('Expected string or Binding, not {}'.format(binding))
 
         # Override particular properties
         #
@@ -298,23 +298,23 @@ class Binding(tuple):
     def __str__(self):
         # Back to string
         #
-        return (f'{self.source}{self.channel:x}.{self.control:x}:'
-                f'{self.mode}{self.method}.{self.target:x}.{self.value:d}')
+        return ('{}{:x}.{:x}:'
+                '{}{}.{:x}.{:d}'.format(self.source, self.channel, self.control, self.mode, self.method, self.target, self.value))
 
 
     def __repr__(self):
-        return f'Binding({self})'
+        return 'Binding({})'.format(self)
 
     @property
     def input_str(self):
         """Get user-facing representation of channel and control
         """
         if self.source==Binding.SOURCE_KEYBOARD:
-            return f'{self.channel_str}{self.control_str.title()}'
+            return '{}{}'.format(self.channel_str, self.control_str.title())
         elif self.source==Binding.SOURCE_PITCHWHEEL:
             return self.channel_str
         else:
-            return f'{self.channel_str}: {self.control_str}'
+            return '{}: {}'.format(self.channel_str, self.control_str)
 
     @property
     def channel_str(self):
@@ -355,12 +355,12 @@ class Binding(tuple):
                                                             Binding.MODE_DIRECT:
                 return ' (+)'
         elif self.mode==Binding.MODE_SET:
-            return f' ({self.value:d})'
+            return ' ({:d})'.format(self.value)
         elif self.mode==Binding.MODE_ALTER:
             if self.value >= 0:
-                return f' (+{self.value:d})'
+                return ' (+{:d})'.format(self.value)
             else:
-                return f' ({self.value:d})'
+                return ' ({:d})'.format(self.value)
         elif self.mode == Binding.MODE_PULSE:
             if self.value < 0x40:
                 return ' (1-)'
@@ -376,7 +376,7 @@ class Binding(tuple):
         if group=='b':
             return control_targets_effects_bank[self.target]
         if group in control_targets:
-            return f'{control_targets[group]} {self.target+1:d}'
+            return '{} {:d}'.format(control_targets[group], self.target+1)
         return ''
 
     # Display helpers used by the _str methods and also SpinButtons
@@ -387,7 +387,7 @@ class Binding(tuple):
     def key_to_str(k):
         name = Gdk.keyval_name(k)
         if name is None:
-            return f'<{k:04X}>'
+            return '<{:04X}>'.format(k)
         return name
 
     @staticmethod
@@ -422,7 +422,7 @@ class Binding(tuple):
 
     @staticmethod
     def note_to_str(n):
-        return f'{Binding.NOTES[n%12]}{n//12-1:d}'
+        return '{}{:d}'.format(Binding.NOTES[n%12], n//12-1)
 
     @staticmethod
     def str_to_note(s):
@@ -621,8 +621,8 @@ class Controls(dbus.service.Object):
                     try:
                         self.bindings.append(Binding(line))
                     except ValueError as e:
-                        print((f'Warning: controls prefs file '
-                               f'contained unreadable binding {line}'),
+                        print(('Warning: controls prefs file '
+                               'contained unreadable binding {}'.format(line)),
                               file=sys.stderr)
             fp.close()
             self.update_lookup()
@@ -683,7 +683,7 @@ class Controls(dbus.service.Object):
         if not(0xFFE1<=event.keyval<0xFFEF or 0xFE01<=event.keyval<0xFE35):
             state = event.state&Binding.MODIFIERS_MASK
             v = 0x7F if event.type==Gdk.EventType.KEY_PRESS else 0
-            self.input(f'k{state:x}.{event.keyval:x}', v)
+            self.input('k{:x}.{:x}'.format(state, event.keyval), v)
 
     # Utility for p_ control methods
     #
@@ -1135,7 +1135,7 @@ class Controls(dbus.service.Object):
 
     @action_method(Binding.MODE_DIRECT, Binding.MODE_SET, Binding.MODE_ALTER)
     def m_vol(self, n, v, isd):
-        agc = getattr(self.owner.prefs_window, f'mic_control_{n}')
+        agc = getattr(self.owner.prefs_window, 'mic_control_{}'.format(n))
         vol = agc.valuesdict[agc.commandname+'_gain'].get_adjustment()
         if isd:
             v += vol.props.value
@@ -1154,7 +1154,7 @@ class Controls(dbus.service.Object):
 
     @action_method(Binding.MODE_DIRECT, Binding.MODE_SET, Binding.MODE_ALTER)
     def m_pan(self, n, v, isd):
-        agc = getattr(self.owner.prefs_window, f'mic_control_{n}')
+        agc = getattr(self.owner.prefs_window, 'mic_control_{}'.format(n))
         pan = agc.valuesdict[agc.commandname+'_pan']
         v = v/127.0*100
         v = pan.get_value()+v if isd else v
@@ -1611,14 +1611,14 @@ class BindingEditor(Gtk.Dialog):
         input_pane.pack_start(row3, False, False)
         input_pane.show_all()
 
-        input_frame = Gtk.Frame.new(f" {_('Input') }")
+        input_frame = Gtk.Frame.new(" {}".format(_('Input')))
         input_frame.set_border_width(4)
         input_frame.add(input_pane)
         input_pane.show()
         set_tip(input_pane, _("The first half of a binding is the input which "
         "comes in the form of the press of a keyboard key or an event from a "
         "midi device.\n\nInput selection can be done manually or with the help"
-                              f' of the \'{_("Listen for input...")}\' option.'))
+                              ' of the \'{}\' option.'.format(_("Listen for input..."))))
 
         self.value_field_pulsebox = Gtk.HBox()
         self.value_field_pulsebox.pack_start(self.value_field_pulse_noinvert)
@@ -1652,13 +1652,13 @@ class BindingEditor(Gtk.Dialog):
         action_pane.pack_start(row3, False, False)
         action_pane.show_all()
 
-        action_frame = Gtk.Frame.new(f" {_('Action')} ")
+        action_frame = Gtk.Frame.new(" {} ".format(_('Action')))
         action_frame.set_border_width(4)
         action_frame.add(action_pane)
         action_pane.show()
 
-        set_tip(action_pane, _((f"The '{_('Action')}' pane determines how the input is "
-                                "handled, and to what effect.")))
+        set_tip(action_pane, _(("The '{}' pane determines how the input is "
+                                "handled, and to what effect.".format(_('Action')))))
 
         hbox = Gtk.HBox(True, spacing=4)
         hbox.pack_start(input_frame)
@@ -1928,7 +1928,7 @@ class TargetAdjustment(CustomAdjustment):
     def read_input(self, text):
         return int(text.rsplit(' ', 1)[-1])-1
     def write_output(self, value):
-        return f'{control_targets[self._group]} {value+1:d}'
+        return '{} {:d}'.format(control_targets[self._group], value+1)
 
 class SingularAdjustment(CustomAdjustment):
     def __init__(self, value = 0):
@@ -2254,11 +2254,11 @@ class BindingListModel(GObject.GObject, Gtk.TreeModel):
         if not binding:
             return None
         if i<3: # invisible sort columns
-            inputix = (f'{Binding.SOURCES.index(binding.source):02x}.'
-                       f'{binding.channel:02x}.{binding.control:04x}')
-            methodix = f'{Binding.METHODS.index(binding.method):02x}'
-            targetix = (f'{Binding.METHOD_GROUPS.index(binding.method[0]):02x}.'
-                        f'{binding.target:02x}')
+            inputix = ('{:02x}.'
+                       '{:02x}.{:04x}'.format(Binding.SOURCES.index(binding.source), binding.channel, binding.control))
+            methodix = '{:02x}'.format(Binding.METHODS.index(binding.method))
+            targetix = ('{:02x}.'
+                        '{:02x}'.format(Binding.METHOD_GROUPS.index(binding.method[0]), binding.target))
             return ':'.join(((inputix, methodix, targetix),
                              (methodix, targetix, inputix), (targetix, methodix, inputix))[i])
 

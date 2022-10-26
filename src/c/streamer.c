@@ -505,7 +505,7 @@ void shout_initialiser()
     
     shout_init();
     shout_version(&major, &minor, &patch);
-    fprintf(stderr, "libshout version %d.%d.%d\n", major, minor, patch);
+    fprintf(stderr, "libshout-idjc version %d.%d.%d\n", major, minor, patch);
     }
 
 struct streamer *streamer_init(struct threads_info *ti, int numeric_id)

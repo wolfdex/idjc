@@ -16,8 +16,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 __all__ = ['SourceClientGui']
 
 import os
@@ -449,7 +447,7 @@ class StatsThread(Thread):
             self.login = d["login"]
         self.passwd = d["password"]
         self.listeners = -2         # preset error code for failed/timeout
-        self.url = f"http://{self.host}:{self.port}{self.mount}"
+        self.url = "http://{}:{}{}".format(self.host, self.port, self.mount)
 
 
     def run(self):
@@ -458,12 +456,12 @@ class StatsThread(Thread):
         class GoodXML(Exception):
             pass
         
-        hostport = f"{self.host}:{self.port}"
+        hostport = "{}:{}".format(self.host, self.port)
         if self.is_shoutcast:
-            stats_url = f"http://{hostport}/admin.cgi?mode=viewxml"
+            stats_url = "http://{}/admin.cgi?mode=viewxml".format(hostport)
             realm = "Shoutcast Server"
         else:
-            stats_url = f"http://{hostport}/admin/listclients?mount={self.mount}"
+            stats_url = "http://{}/admin/listclients?mount={}".format(hostport, self.mount)
             realm = "Icecast2 Server"
         auth_handler = urllib.request.HTTPBasicAuthHandler()
         auth_handler.add_password(realm, hostport, self.login, self.passwd)
@@ -478,7 +476,7 @@ class StatsThread(Thread):
             except IOError:
                 if self.is_shoutcast:
                     # Shoutcast 2 servers don't require a login.
-                    with closing(urllib.request.urlopen(f"http://{hostport}/statistics")) as h:
+                    with closing(urllib.request.urlopen("http://{}/statistics".format(hostport))) as h:
                         data = h.read()
                 else:
                     raise
@@ -489,7 +487,7 @@ class StatsThread(Thread):
         try:
             dom = mdom.parseString(data)
         except Exception as e:
-            print(f"server stats data is not valid xml: {e}")
+            print("server stats data is not valid xml: {}".format(e))
             return
 
         try:
@@ -685,9 +683,9 @@ class ConnectionPane(Gtk.VBox):
                     dtype = 'int'
                 else:
                     dtype = 'str'
-                d.append(f'<{key} dtype="{dtype}">{value}</{key}>')
+                d.append('<{} dtype="{}">{}</{}>'.format(key, dtype, value, key))
             server.append("".join(("<server>", "".join(d), "</server>")))
-        return f"<connections>{''.join(server)}</connections>"
+        return "<connections>{}</connections>".format(''.join(server))
     
     def loader(self, xmldata):
         def get_child_text(nodelist):
@@ -717,7 +715,7 @@ class ConnectionPane(Gtk.VBox):
                     elif dtype == "int":
                         value = int(raw)
                     else:
-                        raise ValueError(f"ConnectionPane.loader: dtype ({dtype}) is unhandled")
+                        raise ValueError("ConnectionPane.loader: dtype ({}) is unhandled".format(dtype))
                     d[key] = value
                 try:
                     d["password"] = base64.b64decode(d["password"].encode('utf-8')).decode('utf-8')
@@ -1142,7 +1140,7 @@ class Tab(Gtk.VBox):
                 indicator.hide()
 
     def send(self, stringtosend):
-        self.source_client_gui.send(f"tab_id={self.numeric_id}\n{stringtosend}")
+        self.source_client_gui.send("tab_id={}\n{}".format(self.numeric_id, stringtosend))
 
     def receive(self):
         return self.source_client_gui.receive()
@@ -1211,7 +1209,7 @@ class Troubleshooting(Gtk.VBox):
                                     self._on_automatic_reconnection, reconbox)
         
         ft = _('The contingency plan upon the stream buffer becoming full is...')
-        frame = Gtk.Frame.new(f" {ft} ")
+        frame = Gtk.Frame.new(" {} ".format(ft))
 
         sbfbox = Gtk.VBox()
         sbfbox.set_border_width(6)
@@ -1368,7 +1366,7 @@ class StreamTab(Tab):
                     "server_type=" + (
                     "Icecast 2", "Shoutcast")[d["server_type"]],
                     "host=" + d["host"],
-                    f"port={d['port']}",
+                    "port={}".format(d['port']),
                     "mount=" + d["mount"],
                     "login=" + d["login"],
                     "password=" + d["password"],
@@ -1450,9 +1448,9 @@ class StreamTab(Tab):
         if self.format_control.finalised:
             fallback = self.metadata_fallback.get_text()
             songname = self.scg.songname or fallback
-            table = [("%%", "%")] + [*zip(("%r", "%t", "%l"), ((
+            table = [("%%", "%")] + list(zip(("%r", "%t", "%l"), ((
                      _getattr(self.scg, x) or fallback) for x in (
-                     "artist", "title", "album")))]
+                     "artist", "title", "album"))))
             table.append(("%s", songname))
             raw_cm = self.metadata.get_text().strip()
             cm = string_multireplace(raw_cm, table)
@@ -1474,7 +1472,7 @@ class StreamTab(Tab):
                     cm = songname
             else:
                 disp = ("no metadata string defined for this stream "
-                        f"format: {fdata['family']} {fdata['codec']}")
+                        "format: {} {}".format(fdata['family'], fdata['codec']))
             
             if cm:
                 if type(cm) is bytes:
@@ -1485,9 +1483,9 @@ class StreamTab(Tab):
 
             self.metadata_display.push(0, disp)
             self.metadata_update.set_relief(Gtk.ReliefStyle.HALF)
-            self.scg.send(f"tab_id={self.numeric_id}\n"
-                          f"dev_type=encoder\ncustom_meta={cm}\n"
-                          "command=new_custom_metadata\n")
+            self.scg.send("tab_id={}\n"
+                          "dev_type=encoder\ncustom_meta={}\n"
+                          "command=new_custom_metadata\n".format(self.numeric_id, cm))
             self.scg.receive()
 
     def cb_new_metadata_format(self, widget):
@@ -1510,9 +1508,9 @@ class StreamTab(Tab):
         auth_handler = urllib.request.HTTPBasicAuthHandler()
 
         if mode == 1:
-            url = (f"http://{urllib.request.quote(srv.host)}:{srv.port}"
-                   f"/admin/killsource?mount={urllib.request.quote(srv.mount)}")
-            auth_handler.add_password("Icecast2 Server", f"{srv.host}:{srv.port}",
+            url = ("http://{}:{}"
+                   "/admin/killsource?mount={}".format(urllib.request.quote(srv.host), srv.port, urllib.request.quote(srv.mount)))
+            auth_handler.add_password("Icecast2 Server", "{}:{}".format(srv.host, srv.port),
                                       srv.login, srv.password)
 
             def check_reply(reply):
@@ -1523,15 +1521,15 @@ class StreamTab(Tab):
                 else:
                     rslt = "succeeded" if elem.findtext("return") == "1" else \
                                                                         "failed"
-                    print(f"kick {rslt}: {elem.findtext('message')}")
+                    print("kick {}: {}".format(rslt, elem.findtext('message')))
                     return rslt == "succeeded"
 
         elif mode == 2:
             password = self.admin_password_entry.get_text().strip() or \
                                                                 srv.password
-            url = (f"http://{urllib.request.quote(srv.host)}:{srv.port}"
-                   "/admin.cgi?mode=kicksrc")
-            auth_handler.add_password("Shoutcast Server", f"{srv.host}:{srv.port}",
+            url = ("http://{}:{}"
+                   "/admin.cgi?mode=kicksrc".format(urllib.request.quote(srv.host), srv.port))
+            auth_handler.add_password("Shoutcast Server", "{}:{}".format(srv.host, srv.port),
                                       "admin", password)
             def check_reply(reply):
                 # Could go to lengths to check the XML stats here.
@@ -1674,7 +1672,7 @@ class StreamTab(Tab):
         ic_vbox.pack_start(hbox, False, False, 0)
         hbox.show()
 
-        frame = Gtk.Frame.new(f" {_('Metadata')} ")
+        frame = Gtk.Frame.new(" {} ".format(_('Metadata')))
         table = Gtk.Table(3, 3)
         table.set_border_width(1)
         table.set_margin_right(4)
@@ -1814,7 +1812,7 @@ class StreamTab(Tab):
         vbox.pack_start(alhbox, False)
         alhbox.show()
 
-        frame = CategoryFrame(f" {_('Contact Details')} ")
+        frame = CategoryFrame(" {} ".format(_('Contact Details')))
         frame.set_border_width(0)
         self.irc_entry = Gtk.Entry()
         set_tip(self.irc_entry,
@@ -1915,13 +1913,13 @@ class RecordTab(Tab):
                             num_id = -1
    
                         filename = datetime.datetime.today().strftime(self.parentobject.scg.parent.prefs_window.recorder_filename.get_text().strip())
-                        table = (("$$", "$"), ("$r", f"{self.parentobject.numeric_id + 1:02d}"))
+                        table = (("$$", "$"), ("$r", "{:02d}".format(self.parentobject.numeric_id + 1)))
                         filename = string_multireplace(filename, table)
                         folder = sd.file_chooser_button.get_current_folder()
-                        self.parentobject.send(f"record_source={num_id}\n"
-                                               f"record_filename={filename}\n"
-                                               f"record_folder={folder}\n"
-                                               "command=recorder_start\n")
+                        self.parentobject.send("record_source={}\n"
+                                               "record_filename={}\n"
+                                               "record_folder={}\n"
+                                               "command=recorder_start\n".format(num_id, filename, folder))
                         sd.set_sensitive(False)
                         self.parentobject.time_indicator.set_sensitive(True)
                         self.path = folder
@@ -2008,9 +2006,9 @@ class RecordTab(Tab):
                 if days > 10:  # Shut off the recorder after 10 days recording.
                     self.parentobject.record_buttons.stop_button.clicked()
                 elif days >= 1:
-                    self.set_text(f"{days}d:{hours:02d}:{minutes:02d}")
+                    self.set_text("{}d:{:02d}:{:02d}".format(days, hours, minutes))
                 else:
-                    self.set_text(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                    self.set_text("{:02d}:{:02d}:{:02d}".format(hours, minutes, seconds))
 
         def button_press_cancel(self, widget, event):
             return True
@@ -2144,7 +2142,7 @@ class RecordTab(Tab):
 class TabFrame(ModuleFrame):
     def __init__(self, scg, frametext, q_tabs, tabtype, indicatorlist,
                                                                 tab_tip_text):
-        ModuleFrame.__init__(self, f" {frametext} ")
+        ModuleFrame.__init__(self, " {} ".format(frametext))
         self.notebook = Gtk.Notebook()
         self.notebook.set_border_width(8)
         self.vbox.add(self.notebook)
@@ -2249,7 +2247,7 @@ class StreamTabFrame(TabFrame):
         self.kick_group.show()
         hbox = Gtk.HBox()
         hbox.set_spacing(6)
-        label = Gtk.Label(f"{_('Metadata:')} ")
+        label = Gtk.Label("{} ".format(_('Metadata:')))
         hbox.pack_start(label, False)
         label.show()
         self.metadata_group = Gtk.ComboBoxText.new_with_entry()
@@ -2281,13 +2279,13 @@ class StreamTabFrame(TabFrame):
         self.objects = { "group_metadata": (self.metadata_group, "history") }
         self.togglelist = [Gtk.CheckButton(str(x + 1)) for x in range(q_tabs)]
         hbox = Gtk.HBox()
-        label = Gtk.Label(f" {_('Group Controls')} ")
+        label = Gtk.Label(" {} ".format(_('Group Controls')))
         hbox.pack_start(label, False)
         label.show()
         for i, cb in enumerate(self.togglelist):
             hbox.pack_start(cb, False)
             cb.show()
-            self.objects[f"group_toggle_{i + 1}"] = (cb, "active")
+            self.objects["group_toggle_{}".format(i + 1)] = (cb, "active")
         spc = Gtk.HBox()
         hbox.pack_end(spc, False, False, 2)
         spc.show()
@@ -2332,12 +2330,12 @@ class SourceClientGui(dbus.service.Object):
         # update the recorder LED indicators 
         for rectab in self.recordtabframe.tabs:
             self.send("dev_type=recorder\n"
-                      f"tab_id={rectab.numeric_id}\ncommand=get_report\n")
+                      "tab_id={}\ncommand=get_report\n".format(rectab.numeric_id))
             while 1:
                 reply = self.receive()
                 if reply == "succeeded" or reply == "failed":
                     break
-                if reply.startswith(f"recorder{rectab.numeric_id}report="):
+                if reply.startswith("recorder{}report=".format(rectab.numeric_id)):
                     recorder_state, recorded_seconds = reply.split("=")[
                                                                 1].split(":")
                     rectab.show_indicator(("clear", "red", "amber", "clear")[
@@ -2358,12 +2356,12 @@ class SourceClientGui(dbus.service.Object):
                 update_listeners = True
                 l_count += cp.listeners
             
-            self.send(f"dev_type=streamer\ntab_id={streamtab.numeric_id}\n"
-                      "command=get_report\n")
+            self.send("dev_type=streamer\ntab_id={}\n"
+                      "command=get_report\n".format(streamtab.numeric_id))
             reply = self.receive()
             if reply != "failed":
                 self.receive()
-                if reply.startswith(f"streamer{streamtab.numeric_id}report="):
+                if reply.startswith("streamer{}report=".format(streamtab.numeric_id)):
                     streamer_state, stream_sendbuffer_pc, brand_new = \
                                                     reply.split("=")[1].split(":")
                     state = int(streamer_state)
@@ -2509,7 +2507,7 @@ class SourceClientGui(dbus.service.Object):
     def send(self, string_to_send):
         if self.comms_reply_pending:  # Dump unused replies from previous send.
             raise RuntimeError("uncollected reply from previous command: "
-                               f"\n{self.comms_reply_pending}+++")
+                               "\n{}+++".format(self.comms_reply_pending))
         if not "tab_id=" in string_to_send:
             string_to_send = "tab_id=-1\n" + string_to_send
         self.parent.mixer_write(string_to_send + "end\n", "sc")
@@ -2541,8 +2539,8 @@ class SourceClientGui(dbus.service.Object):
         self.title = title
         self.album = album
         self.songname = songname
-        self.send(f"artist={artist.strip()}\ntitle={title.strip()}\n"
-                  f"album={album.strip()}\ncommand=new_song_metadata\n")
+        self.send("artist={}\ntitle={}\n"
+                  "album={}\ncommand=new_song_metadata\n".format(artist.strip(), title.strip(), album.strip()))
         if self.receive() == "succeeded":
             print("updated song metadata successfully")
 
@@ -2870,8 +2868,8 @@ class SourceClientGui(dbus.service.Object):
             for tab in tabs:
                 sc = tab.server_connect
                 if sc.get_sensitive():
-                    mi = Gtk.CheckMenuItem(f"{tab.numeric_id + 1} "
-                                           f"{sc.get_children()[0].get_label()}")
+                    mi = Gtk.CheckMenuItem("{} "
+                                           "{}".format(tab.numeric_id + 1, sc.get_children()[0].get_label()))
                     mi.set_active(sc.get_active())
                     menu.append(mi)
                     mi.show()

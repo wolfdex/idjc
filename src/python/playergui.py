@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 __all__ = [ 'IDJC_Media_Player', 'make_arrow_button', 'supported' ]
 
 import os
@@ -89,7 +87,7 @@ warnings.filterwarnings("ignore", "IA__gtk_tree_view_scroll_to_cell: assertion"
 # Named tuple for a playlist row.
 class PlayerRow(namedtuple("PlayerRow",
 "rsmeta filename length meta encoding title artist replaygain cuesheet album uuid")):
-    def __nonzero__(self):
+    def __bool__(self):
         return self.rsmeta != "<s>valid</s>"
 
 # ReplayGain value to indicate default.
@@ -224,7 +222,7 @@ class CueSheetListStore(Gtk.ListStore):
             title = row[5]
             row[5] = title
 
-    def __nonzero__(self):
+    def __bool__(self):
         return len(self) != 0
 
     def __getitem__(self, i):
@@ -1309,21 +1307,21 @@ class IDJC_Media_Player(dbus.service.Object):
                     x = list(audio.get("Artist", []))
                     x += list(audio.get("Author", []))
                     if x:
-                        artist = "/".join(x)
+                        artist = "/".join(str(x) for x in x)
 
                     try:
                         x = list(audio["Title"])
                     except:
                         pass
                     else:
-                        title = "/".join(x)
+                        title = "/".join(str(x) for x in x)
 
                     try:
                         x = list(audio["Album"])
                     except:
                         pass
                     else:
-                        album = "/".join(x)
+                        album = "/".join(str(x) for x in x)
 
                     try:
                         rg = gain(audio)
@@ -1381,11 +1379,11 @@ class IDJC_Media_Player(dbus.service.Object):
 
         if artist and title and album:
             if "(" in album:
-                      return player_row(f"{artist} - {title} - [{album}]")
+                      return player_row("{} - {} - [{}]".format(artist, title, album))
             else:
-                      return player_row(f"{artist} - {title} - ({album})")
+                      return player_row("{} - {} - ({})".format(artist, title, album))
         elif artist and title:
-                  return player_row(f"{artist} - {title}")
+                  return player_row("{} - {}".format(artist, title))
         else:
             return PlayerRow(rsmeta_name, filename, length, meta_name, encoding,
                 title_retval, artist, rg, cuesheet, album, uuid_)
@@ -1396,7 +1394,7 @@ class IDJC_Media_Player(dbus.service.Object):
         for item in self.liststore:
             if item[1] == newdata[1]:
                 if item[0].startswith("<b>"):
-                    item[0] = f"<b>{newdata[0]}</b>"
+                    item[0] = "<b>{}</b>".format(newdata[0])
                     active = item
                 else:
                     item[0] = newdata[0]
@@ -2637,13 +2635,14 @@ class IDJC_Media_Player(dbus.service.Object):
                 box = Gtk.HBox()
                 box.set_border_width(3)
                 frame.add(box)
-                entry = Gtk.Entry()
-                entry.set_can_focus(False)
-                entry.set_has_frame(False)
-                text = "*" + ", *".join(supported.media)
-                entry.set_text(text)
-                entry.show()
-                box.add(entry)
+                text = " ".join(sorted(supported.media)).replace(".", "")
+                label = Gtk.Label()
+                label.set_max_width_chars(30)
+                label.set_line_wrap(True)
+                label.set_line_wrap_mode(Pango.WrapMode.WORD)
+                label.set_text(text)
+                label.show()
+                box.add(label)
                 box.show()
                 self.filerq.set_extra_widget(frame)
                 self.filerq.connect("response", self.file_response)
@@ -2925,7 +2924,7 @@ class IDJC_Media_Player(dbus.service.Object):
         return False
 
     def cb_menu_select(self, widget, data):
-        print(f"The {data} was chosen from the {self.playername} menu")
+        print("The {} was chosen from the {} menu".format(data, self.playername))
 
     def delete_event(self, widget, event, data=None):
         return False

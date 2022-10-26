@@ -15,8 +15,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 import os
 import shutil
 import gettext
@@ -838,6 +836,11 @@ class mixprefs:
             else:
                 MAIN_TIPS.disable()
 
+    def cb_history_scale(self, widget):
+        # Reattach with a different height.
+        self.parent.grid1.remove(self.parent.history_vbox)
+        self.parent.grid1.attach(self.parent.history_vbox, 0, 16, 1, int(widget.get_value()))
+
     def cb_mic_boost(self, widget):
         self.parent.send_new_mixer_stats()
                           
@@ -1022,6 +1025,23 @@ class mixprefs:
         
         outervbox.pack_start(aud_rs_hbox, False, False, 0)
         aud_rs_hbox.show()
+        
+        # Not wanting to add a pane into the main player window as it would look ugly
+        # we get this instead. Extreme values produce large application window sizes.
+        frame = Gtk.Frame.new(" {} ".format(_("History Window Relative Size")))
+        frame.set_label_align(0.5, 0.5)
+        frame.set_border_width(3)
+        history_scale_hbox = Gtk.HBox()
+        history_scale_hbox.set_border_width(3)
+        self.history_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1.0, 24.0, 1.0)
+        self.history_scale.set_value(5)
+        self.history_scale.connect("value-changed", self.cb_history_scale)
+        history_scale_hbox.pack_start(self.history_scale, True, True, 0)
+        self.history_scale.show()
+        frame.add(history_scale_hbox)
+        history_scale_hbox.show()
+        outervbox.pack_start(frame, False, False, 0)
+        frame.show()
         
         # TC: the set of features - section heading.
         featuresframe = Gtk.Frame.new(" %s " % _('Feature Set'))
@@ -1735,7 +1755,8 @@ class mixprefs:
             "rg_default"    : self.rg_defaultgain,
             "rg_boost"      : self.rg_boost,
             "r128_boost"    : self.r128_boost,
-            "all_boost"    : self.all_boost
+            "all_boost"     : self.all_boost,
+            "hist_scale"    : self.history_scale
             }
 
         for each in itertools.chain(mic_controls, (opener_settings,

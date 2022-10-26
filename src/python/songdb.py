@@ -17,8 +17,6 @@
 #   along with this program in the file entitled COPYING.
 #   If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-
 import os
 import ntpath
 import time
@@ -712,9 +710,9 @@ class ViewerCommon(PageCommon):
         if bitrate == 0:
             renderer.props.text = ""
         elif self._db_type == "P3":
-            renderer.props.text = f"{bitrate}k"
+            renderer.props.text = "{}k".format(bitrate)
         elif bitrate > 9999 and self._db_type in (AMPACHE, AMPACHE_3_7):
-            renderer.props.text = f"{bitrate // 1000}k"
+            renderer.props.text = "{}k".format(bitrate // 1000)
         renderer.props.xalign = 1.0
 
     def _query_cook_common(self, query):
@@ -798,12 +796,12 @@ class ViewerCommon(PageCommon):
         v_in = model.get_value(iter, cell)
         d, h, m, s = ViewerCommon._secs_to_h_m_s(v_in)
         if d:
-            v_out = f"{d}d:{h:02d}:{m:02d}"
+            v_out = "{}d:{:02d}:{:02d}".format(d, h, m)
         else:
             if h:
-                v_out = f"{h}:{m:02d}:{s:02d}"
+                v_out = "{}:{:02d}:{:02d}".format(h, m, s)
             else:
-                v_out = f"{m}:{s:02d}"
+                v_out = "{}:{:02d}".format(m, s)
         renderer.props.xalign = 1.0
         renderer.props.text = v_out
         
@@ -829,7 +827,7 @@ class ViewerCommon(PageCommon):
             return _("<unknown>") + " "
         difftime = time.time() - int(value)
         d, h, m, s = ViewerCommon._secs_to_h_m_s(difftime)
-        return f"{d:.0f}d {h:.0f}h {m:.0f}m ago "
+        return "{:.0f}d {:.0f}h {:.0f}m ago ".format(d, h, m)
 
     def _get_played_percent(self, catalog, value):
         if value is None:
@@ -1238,7 +1236,7 @@ class TreePage(ViewerCommon):
                     year = row[2]
                     disk = None
                     if year:
-                        albumtext = f"{self._join(alb_prefix, album)} ({year})"
+                        albumtext = "{} ({})".format(self._join(alb_prefix, album), year)
                     else:
                         albumtext = album
                     iter_1 = append(iter_l, (-2, albumtext) + BLANK_ROW)
@@ -1534,7 +1532,7 @@ class FlatPage(ViewerCommon):
                 append((found, ) + row)
             else:
                 if found:
-                    self.tree_cols[0].set_title(f"({found})")
+                    self.tree_cols[0].set_title("({})".format(found))
                     self.tree_view.set_model(self.list_store)
                 return False
 
@@ -1607,9 +1605,9 @@ class CatalogsInterface(GObject.GObject):
             return "FALSE"
 
         if len(ids) == 1:
-            which = f"catalog = {ids[0]}"
+            which = "catalog = {}".format(ids[0])
         else:
-            which = f"catalog IN {ids}"
+            which = "catalog IN {}".format(ids)
 
         return which + ' AND catalog.catalog_type = "local"'
     
@@ -1883,7 +1881,7 @@ class MediaPane(Gtk.VBox):
         """Grab column widths as textual data."""
         
         try:
-            target = getattr(self, f"_{keyval}_page")
+            target = getattr(self, "_{}_page".format(keyval))
         except AttributeError as e:
             print(e)
             return ""
@@ -1895,7 +1893,7 @@ class MediaPane(Gtk.VBox):
         
         if data:
             try:
-                target = getattr(self, f"_{keyval}_page")
+                target = getattr(self, "_{}_page".format(keyval))
             except AttributeError as e:
                 print(e)
                 return
@@ -1907,17 +1905,17 @@ class MediaPane(Gtk.VBox):
             # Connect and discover the database type.
             self.usesettings = usesettings
             for i in range(1, 4):
-                setattr(self, f"_acc{i}", DBAccessor(**accdata))
+                setattr(self, "_acc{}".format(i), DBAccessor(**accdata))
             self._acc1.request(('SHOW tables',), self._stage_1, self._fail_1)
         else:
             try:
                 for i in range(1, 4):
-                    getattr(self, f"_acc{i}").close()
+                    getattr(self, "_acc{}".format(i)).close()
             except AttributeError:
                 pass
             else:
                 for each in "tree flat catalogs".split():
-                    getattr(self, f"_{each}_page").deactivate()
+                    getattr(self, "_{}_page".format(each)).deactivate()
             self.hide()
 
     @staticmethod
