@@ -1,0 +1,182 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+
+<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="description" content="Internet DJ Console (IDJC) is a Shoutcast/Icecast internet radio client incorporating features for live radio show production." />
+<meta name="keywords" xml:lang="en" content="idjc dj shoutcast icecast radio linux gtk live recorded voip irc" />
+<link rel="shortcut icon" href="favicon.png" type="application/png" />
+<link rel="stylesheet" href="style.css" type="text/css" />
+<!--[if lte IE 7]><link rel="stylesheet" href="style_ie.css" type="text/css" /><![endif]-->
+<title>Internet DJ Console Homepage</title>
+
+<script type="text/javascript">
+// Change the title text and highlight a navigation bar option.
+function ui(title, menu) {
+  document.getElementById('title').innerHTML = title;
+  s = document.getElementById(menu).style;
+  s.color = "#F70";
+  s.fontWeight = "bold";
+  s.textDecoration = "underline";
+}
+</script>
+
+</head>
+<body>
+<!-- Hidden h1 title for search engine seeding -->
+<h1 class="unshown">Internet DJ Console Homepage IDJC</h1>
+<table id="main-table">
+ <tr><td>
+            <table>
+               <tr id="logo-holder">
+                  <td>
+                  <img src="site-logo.png" width="148" height="212" alt="website logo" title="Internet DJ Console homepage"/>
+                  </td>
+               </tr>
+               <tr>
+                  <td id="left-sidebar">
+                   <h3>Contents</h3>
+                   <ul id="sidebar-menu">
+                    <li><a href="index.html" id="front-page-nav">Front page</a></li>
+                    <li><a href="tour.html" id="tour-nav">Tour</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tour_main.html" id="tour-main-nav">Main window</a></li>
+                      <li><a href="tour_jingles.html" id="tour-jingles-nav">Jingles</a></li>
+                      <li><a href="tour_output.html" id="tour-output-nav">Output</a></li>
+                      <li><a href="tour_preferences.html" id="tour-preferences-nav">Preferences</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="install.html" id="install-nav">Installation</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="install_standard.html" id="install-standard-nav">Standard</a></li>
+                      <li><a href="install_build.html" id="install-build-nav">Building</a></li>
+                      <li><a href="install_first_run.html" id="install-first-run-nav">First run</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="tutorials.html" id="tutorials-nav">Tutorials</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tutorials_icecast.html" id="tutorials-icecast-nav">Icecast</a></li>
+                      <li><a href="tutorials_shoutcast.html" id="tutorials-shoutcast-nav">Shoutcast</a></li>
+                      <li><a href="tutorials_voip.html" id="tutorials-voip-nav">VoIP</a></li>
+                      <li><a href="tutorials_streaming_aac.html" id="tutorials-streamingaac-nav">AAC</a></li>
+                      <li><a href="tutorials_jack_ports_demystified.html" id="tutorials-jackportsdemyst-nav">JACK Ports</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="code.html" id="code-nav">Extra code</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="code_idjcmon.html" id="code-idjcmon-nav">idjcmon.py</a></li>
+                     </ul>
+                    </li>
+                    
+                    <li><a href="contact.html" id="contact-nav">Contact</a></li>
+                   </ul>
+                  </td>
+               </tr>
+            </table>
+     </td>
+     <td>
+            <table id="right-table">
+               <tr>
+                  <td id="top-titlebar">
+                     <h2 id="title"></h2> 
+                  </td>
+               </tr>
+               <tr>
+                  <td>
+<script type="text/javascript">
+ui('Tutorials: Streaming with Shoutcast and IDJC', 'tutorials-shoutcast-nav')
+</script>
+
+<h4>Aims</h4>
+
+<p>In this section I'm going to walk you through the procedure of setting up a Shoutcast server
+and then sending a live stream to it with IDJC. In addition I will demonstrate the connection of
+a listener to show that everything really does work.</p>
+
+<p>The advice below is for demonstration purposes only. Not covered are best practices of locking
+down a Shoutcast server for serious use. There are plenty of specialized Shoutcast hosting services
+to take that burden, for a price.</p>
+
+<h4>Obtaining Shoutcast</h4>
+
+<p>Shoutcast may not be available in your Linux distribution. Not really a problem since it's available
+as a presumably statically linked binary from <a href="http://www.shoutcast.com">http://www.shoutcast.com</a>.
+</p>
+
+<h4>Setting up Shoutcast</h4>
+
+<p>Having downloaded the version of Shoutcast that's right for your platform and extracted it from
+the archive you should locate the Shoutcast executable called sc_serv. This needs to be run with a suitable
+confirguration file. There are some examples of these in the source tree as well as a configuration builder.
+For the sake of simplicity a minimalist configuration will be used for this demonstration.
+</p>
+
+<p>Let's use a basic configuration file that we shall call sc_serv.conf which allows IDJC and listener clients to
+connect to/from localhost merely for test purposes and contains the following text:</p>
+<pre>
+logfile=logs/sc_serv.log
+w3clog=logs/sc_w3c.log
+banfile=control/sc_serv.ban
+ripfile=control/sc_serv.rip
+password=changeme
+adminpassword=protected
+</pre>
+
+<p>Let's run this with the following command.</p>
+
+<pre>$ ./sc_serv sc_serv.conf</pre>
+
+<p>Assuming you were not dumped back to a console prompt the server is now running.</p>
+
+<h4>Configuring IDJC</h4>
+
+<p>Start the JACK sound server as follows.</p>
+<pre>$ jackd -d dummy -r 44100</pre>
+<p>This is done so that any media player, even one that does not support JACK Audio Connection Kit can be
+used for playing the stream on this machine.</p>
+
+<p>Run IDJC open the Output window from the View menu. Click Configuration so the
+configuration section is visible.</p>
+
+<p>Click Connection, then New.</p>
+<p>For Server type you want Shoutcast Master, for Hostname, localhost, port number should be 8000 and the password
+will be the default password, which is <span style="color:red;" title="Obviously a server exposed to the Internet&#32;
+should never be configured to use its default password">changeme</span>. Click Ok to add the server to the list.</p>
+
+<p>Click Format. Select MPEG and click the right arrow repeatedly until all the option boxes appear.</p>
+
+<p>Click Individual Controls so the controls section is visible and click the button that says
+localhost:8000/listen.</p>
+
+<p>If the button stays in you have made the connection.</p>
+
+<h4>Streaming some audio</h4>
+
+<p>Click the down pointing arrow on the left media player and using the file selector add a track to the
+playlist. Click play. Make sure the crossfader is set all the way to the left. Make sure Stream is on and DJ is off.
+You should be able to see the Str Peak meter is active.</p>
+
+<p>If you can't hear anything right now it's because DJ is off and/or you are running a dummy JACK soundcard,
+which is what you want for the sake of this test.</p>
+
+<h4>Join the stream as a listener</h4>
+
+<pre>$ mplayer http://localhost:8000/listen</pre>
+
+<p>After a brief moment audio should start to play and within thirty seconds the listener count in the main IDJC
+window should have risen to 1. It's possible to add more listeners up to the maximum number currently
+specified in the Shoutcast configuration file.</p>
+                  </td>
+               </tr>
+            </table>
+     </td>
+ </tr>
+</table>
+</body>
+</html>

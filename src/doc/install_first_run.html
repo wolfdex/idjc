@@ -1,0 +1,205 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+
+<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="description" content="Internet DJ Console (IDJC) is a Shoutcast/Icecast internet radio client incorporating features for live radio show production." />
+<meta name="keywords" xml:lang="en" content="idjc dj shoutcast icecast radio linux gtk live recorded voip irc" />
+<link rel="shortcut icon" href="favicon.png" type="application/png" />
+<link rel="stylesheet" href="style.css" type="text/css" />
+<!--[if lte IE 7]><link rel="stylesheet" href="style_ie.css" type="text/css" /><![endif]-->
+<title>Internet DJ Console Homepage</title>
+
+<script type="text/javascript">
+// Change the title text and highlight a navigation bar option.
+function ui(title, menu) {
+  document.getElementById('title').innerHTML = title;
+  s = document.getElementById(menu).style;
+  s.color = "#F70";
+  s.fontWeight = "bold";
+  s.textDecoration = "underline";
+}
+</script>
+
+</head>
+<body>
+<!-- Hidden h1 title for search engine seeding -->
+<h1 class="unshown">Internet DJ Console Homepage IDJC</h1>
+<table id="main-table">
+ <tr><td>
+            <table>
+               <tr id="logo-holder">
+                  <td>
+                  <img src="site-logo.png" width="148" height="212" alt="website logo" title="Internet DJ Console homepage"/>
+                  </td>
+               </tr>
+               <tr>
+                  <td id="left-sidebar">
+                   <h3>Contents</h3>
+                   <ul id="sidebar-menu">
+                    <li><a href="index.html" id="front-page-nav">Front page</a></li>
+                    <li><a href="tour.html" id="tour-nav">Tour</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tour_main.html" id="tour-main-nav">Main window</a></li>
+                      <li><a href="tour_jingles.html" id="tour-jingles-nav">Jingles</a></li>
+                      <li><a href="tour_output.html" id="tour-output-nav">Output</a></li>
+                      <li><a href="tour_preferences.html" id="tour-preferences-nav">Preferences</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="install.html" id="install-nav">Installation</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="install_standard.html" id="install-standard-nav">Standard</a></li>
+                      <li><a href="install_build.html" id="install-build-nav">Building</a></li>
+                      <li><a href="install_first_run.html" id="install-first-run-nav">First run</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="tutorials.html" id="tutorials-nav">Tutorials</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tutorials_icecast.html" id="tutorials-icecast-nav">Icecast</a></li>
+                      <li><a href="tutorials_shoutcast.html" id="tutorials-shoutcast-nav">Shoutcast</a></li>
+                      <li><a href="tutorials_voip.html" id="tutorials-voip-nav">VoIP</a></li>
+                      <li><a href="tutorials_streaming_aac.html" id="tutorials-streamingaac-nav">AAC</a></li>
+                      <li><a href="tutorials_jack_ports_demystified.html" id="tutorials-jackportsdemyst-nav">JACK Ports</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="code.html" id="code-nav">Extra code</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="code_idjcmon.html" id="code-idjcmon-nav">idjcmon.py</a></li>
+                     </ul>
+                    </li>
+                    
+                    <li><a href="contact.html" id="contact-nav">Contact</a></li>
+                   </ul>
+                  </td>
+               </tr>
+            </table>
+     </td>
+     <td>
+            <table id="right-table">
+               <tr>
+                  <td id="top-titlebar">
+                     <h2 id="title"></h2> 
+                  </td>
+               </tr>
+               <tr>
+                  <td>
+<script type="text/javascript">
+ui('Installation: First run', 'install-first-run-nav')
+</script>
+
+<h4>The purpose of this page</h4>
+
+<p>Some system configuration needs to be done in order to be able to run IDJC. Fortunately it only needs
+to be done once and full details follow.</p>
+
+<h4>Configuring your system for JACK Audio Connection Kit</h4>
+
+<h5>No JACK means no IDJC</h5>
+
+<p>I'm going to be talking about JACK Audio Connection Kit (or JACK) from now on
+and its sound server, <i>jackd</i>. Forget IDJC exists for the moment as the information on this page
+applies to all applications that require JACK in order to function.</p>
+
+<h5>Manually running <i>jackd</i> to see what happens</h5>
+<pre>$ jackd -d alsa
+jackd 0.121.0
+Copyright 2001-2009 Paul Davis, Stephane Letz, Jack O'Quinn, Torben Hohn and others.
+jackd comes with ABSOLUTELY NO WARRANTY
+This is free software, and you are welcome to redistribute it
+under certain conditions; see the file COPYING for details
+
+
+JACK is running in realtime mode, but you are not allowed to use realtime scheduling.
+Please check your /etc/security/limits.conf for the following line
+and correct/add it if necessary:
+
+  @audio          -       rtprio          99
+
+After applying these changes, please re-login in order for them to take effect.
+
+You don't appear to have a sane system configuration. It is very likely that you
+encounter xruns. Please apply all the above mentioned changes and start jack again!</pre>
+
+<p>What just happened here is <i>jackd</i> just failed to start because it runs realtime mode by default
+and your system as it is configured won't supply it. Realtime mode helps to ensure that the small and
+therefore low latency audio buffers are refilled without interruption. By choosing not to use realtime mode
+the buffer fills become more erratic making solid performance rely on using larger buffers that result in higher latency.</p>
+
+<h5>Let's get reconfiguring</h5>
+
+<p>Add the line mentioned above to the file also mentioned above.</p>
+
+<ul>
+<li><p>Ubuntu</p><pre class="reduced">$ sudo su -c 'echo "@audio   -   rtprio   99" >> /etc/security/limits.conf'</pre></li>
+<li><p>Debian</p><pre class="reduced">$ su -c 'echo "@audio   -   rtprio   99" >> /etc/security/limits.conf'</pre></li>
+</ul>
+
+<p>The above change applies only to members of the audio group. Ensure your user account is a member.</p>
+
+<pre>$ sudo usermod -a -G audio $(whoami)</pre>
+
+<p>Log out of your desktop and log back in again for the new settings to take effect.</p>
+
+<p>Let's try starting <i>jackd</i> one more time.</p>
+
+<pre>$ jackd -d alsa
+jackd 0.121.0
+Copyright 2001-2009 Paul Davis, Stephane Letz, Jack O'Quinn, Torben Hohn and others.
+jackd comes with ABSOLUTELY NO WARRANTY
+This is free software, and you are welcome to redistribute it
+under certain conditions; see the file COPYING for details
+
+JACK compiled with System V SHM support.
+cannot lock down memory for jackd (Cannot allocate memory)
+loading driver ..
+creating alsa driver ... hw:0|hw:0|1024|2|48000|0|0|nomon|swmeter|-|32bit
+control device hw:0
+configuring for 48000Hz, period = 1024 frames (21.3 ms), buffer = 2 periods
+ALSA: final selected sample format for capture: 16bit little-endian
+ALSA: use 2 periods for capture
+ALSA: final selected sample format for playback: 16bit little-endian
+ALSA: use 2 periods for playback</pre>
+<p>This time it has successfully started so you can now run IDJC.</p>
+
+<h5>Making a simple JACK configuration file</h5>
+
+<pre>$ echo "/usr/bin/jackd -d alsa -r 44100 -p 256" > ~/.jackdrc</pre>
+
+<p>This will ensure that when <i>jackd</i> is started on demand that it will do so with a sample
+rate equalling that of CD audio and therefore most likely your entire music collection.</p>
+
+<h5>Making JACK use a particular sound card</h5>
+
+<p>It's a two step process of finding the names of all the sound cards and specifying
+which one to use to <i>jackd</i>.</p>
+
+<pre>$ cat /proc/asound/cards
+ 0 [Revolution71   ]: ICE1724 - M Audio Revolution-7.1
+                      M Audio Revolution-7.1 at 0xd000, irq 19
+ 1 [nanoKONTROL    ]: USB-Audio - nanoKONTROL
+                      KORG INC. nanoKONTROL at usb-0000:00:1d.0-2, full speed
+$ jackd -d alsa -d Revolution71 -r 44100 -p 256</pre>
+
+<h5>Enabling MIDI events</h5>
+
+<pre>$ jackd -d alsa -r 44100 --midi raw</pre>
+
+<p>Only use the <i>--midi</i> option if you intend to use a MIDI device to control IDJC.</p>
+
+<h4>Finally</h4>
+<p>The program <i>qjackctl</i> can be used to start a JACK sound server. It has a nice graphical user
+interface and can generate a <i>.jackdrc</i> file as well.</p>
+                  </td>
+               </tr>
+            </table>
+     </td>
+ </tr>
+</table>
+</body>
+</html>

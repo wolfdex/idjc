@@ -1,0 +1,118 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+
+<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="description" content="Internet DJ Console (IDJC) is a Shoutcast/Icecast internet radio client incorporating features for live radio show production." />
+<meta name="keywords" xml:lang="en" content="idjc dj shoutcast icecast radio linux gtk live recorded voip irc" />
+<link rel="shortcut icon" href="favicon.png" type="application/png" />
+<link rel="stylesheet" href="style.css" type="text/css" />
+<!--[if lte IE 7]><link rel="stylesheet" href="style_ie.css" type="text/css" /><![endif]-->
+<title>Internet DJ Console Homepage</title>
+
+<script type="text/javascript">
+// Change the title text and highlight a navigation bar option.
+function ui(title, menu) {
+  document.getElementById('title').innerHTML = title;
+  s = document.getElementById(menu).style;
+  s.color = "#F70";
+  s.fontWeight = "bold";
+  s.textDecoration = "underline";
+}
+</script>
+
+</head>
+<body>
+<!-- Hidden h1 title for search engine seeding -->
+<h1 class="unshown">Internet DJ Console Homepage IDJC</h1>
+<table id="main-table">
+ <tr><td>
+            <table>
+               <tr id="logo-holder">
+                  <td>
+                  <img src="site-logo.png" width="148" height="212" alt="website logo" title="Internet DJ Console homepage"/>
+                  </td>
+               </tr>
+               <tr>
+                  <td id="left-sidebar">
+                   <h3>Contents</h3>
+                   <ul id="sidebar-menu">
+                    <li><a href="index.html" id="front-page-nav">Front page</a></li>
+                    <li><a href="tour.html" id="tour-nav">Tour</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tour_main.html" id="tour-main-nav">Main window</a></li>
+                      <li><a href="tour_jingles.html" id="tour-jingles-nav">Jingles</a></li>
+                      <li><a href="tour_output.html" id="tour-output-nav">Output</a></li>
+                      <li><a href="tour_preferences.html" id="tour-preferences-nav">Preferences</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="install.html" id="install-nav">Installation</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="install_standard.html" id="install-standard-nav">Standard</a></li>
+                      <li><a href="install_build.html" id="install-build-nav">Building</a></li>
+                      <li><a href="install_first_run.html" id="install-first-run-nav">First run</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="tutorials.html" id="tutorials-nav">Tutorials</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tutorials_icecast.html" id="tutorials-icecast-nav">Icecast</a></li>
+                      <li><a href="tutorials_shoutcast.html" id="tutorials-shoutcast-nav">Shoutcast</a></li>
+                      <li><a href="tutorials_voip.html" id="tutorials-voip-nav">VoIP</a></li>
+                      <li><a href="tutorials_streaming_aac.html" id="tutorials-streamingaac-nav">AAC</a></li>
+                      <li><a href="tutorials_jack_ports_demystified.html" id="tutorials-jackportsdemyst-nav">JACK Ports</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="code.html" id="code-nav">Extra code</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="code_idjcmon.html" id="code-idjcmon-nav">idjcmon.py</a></li>
+                     </ul>
+                    </li>
+                    
+                    <li><a href="contact.html" id="contact-nav">Contact</a></li>
+                   </ul>
+                  </td>
+               </tr>
+            </table>
+     </td>
+     <td>
+            <table id="right-table">
+               <tr>
+                  <td id="top-titlebar">
+                     <h2 id="title"></h2> 
+                  </td>
+               </tr>
+               <tr>
+                  <td>
+<script type="text/javascript">
+ui('Installation', 'install-nav')
+</script>
+
+<h4>Firstly, open a terminal</h4>
+
+<p>In this section and on the remainder of this site there will be instructions that are
+intended to be entered into a terminal. Those lines will be preceded by a <i>$</i> symbol and require
+the text that follows to be typed in exactly as written apart from any text appearing in
+<span style="color:red;" title="This is just an example.">red</span>, which will have some accompanying
+mouse-hover text.</p>
+
+<h4>Install and configure links</h4>
+
+<ul>
+<li class="content-page"><a href="install_standard.html">Standard install from a code repository</a></li>
+<li class="content-page"><a href="install_build.html">Building and installing IDJC from source</a></li>
+<li class="content-page"><a href="install_first_run.html">Post install configuration prior to the first run</a></li>
+</ul>
+                  </td>
+               </tr>
+            </table>
+     </td>
+ </tr>
+</table>
+</body>
+</html>

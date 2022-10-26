@@ -1,0 +1,154 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+
+<meta http-equiv="content-type" content="text/html;charset=utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+<meta name="description" content="Internet DJ Console (IDJC) is a Shoutcast/Icecast internet radio client incorporating features for live radio show production." />
+<meta name="keywords" xml:lang="en" content="idjc dj shoutcast icecast radio linux gtk live recorded voip irc" />
+<link rel="shortcut icon" href="favicon.png" type="application/png" />
+<link rel="stylesheet" href="style.css" type="text/css" />
+<!--[if lte IE 7]><link rel="stylesheet" href="style_ie.css" type="text/css" /><![endif]-->
+<title>Internet DJ Console Homepage</title>
+
+<script type="text/javascript">
+// Change the title text and highlight a navigation bar option.
+function ui(title, menu) {
+  document.getElementById('title').innerHTML = title;
+  s = document.getElementById(menu).style;
+  s.color = "#F70";
+  s.fontWeight = "bold";
+  s.textDecoration = "underline";
+}
+</script>
+
+</head>
+<body>
+<!-- Hidden h1 title for search engine seeding -->
+<h1 class="unshown">Internet DJ Console Homepage IDJC</h1>
+<table id="main-table">
+ <tr><td>
+            <table>
+               <tr id="logo-holder">
+                  <td>
+                  <img src="site-logo.png" width="148" height="212" alt="website logo" title="Internet DJ Console homepage"/>
+                  </td>
+               </tr>
+               <tr>
+                  <td id="left-sidebar">
+                   <h3>Contents</h3>
+                   <ul id="sidebar-menu">
+                    <li><a href="index.html" id="front-page-nav">Front page</a></li>
+                    <li><a href="tour.html" id="tour-nav">Tour</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tour_main.html" id="tour-main-nav">Main window</a></li>
+                      <li><a href="tour_jingles.html" id="tour-jingles-nav">Jingles</a></li>
+                      <li><a href="tour_output.html" id="tour-output-nav">Output</a></li>
+                      <li><a href="tour_preferences.html" id="tour-preferences-nav">Preferences</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="install.html" id="install-nav">Installation</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="install_standard.html" id="install-standard-nav">Standard</a></li>
+                      <li><a href="install_build.html" id="install-build-nav">Building</a></li>
+                      <li><a href="install_first_run.html" id="install-first-run-nav">First run</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="tutorials.html" id="tutorials-nav">Tutorials</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="tutorials_icecast.html" id="tutorials-icecast-nav">Icecast</a></li>
+                      <li><a href="tutorials_shoutcast.html" id="tutorials-shoutcast-nav">Shoutcast</a></li>
+                      <li><a href="tutorials_voip.html" id="tutorials-voip-nav">VoIP</a></li>
+                      <li><a href="tutorials_streaming_aac.html" id="tutorials-streamingaac-nav">AAC</a></li>
+                      <li><a href="tutorials_jack_ports_demystified.html" id="tutorials-jackportsdemyst-nav">JACK Ports</a></li>
+                     </ul>
+                    </li>
+                    <li><a href="code.html" id="code-nav">Extra code</a></li>
+                    <li>
+                     <ul>
+                      <li><a href="code_idjcmon.html" id="code-idjcmon-nav">idjcmon.py</a></li>
+                     </ul>
+                    </li>
+                    
+                    <li><a href="contact.html" id="contact-nav">Contact</a></li>
+                   </ul>
+                  </td>
+               </tr>
+            </table>
+     </td>
+     <td>
+            <table id="right-table">
+               <tr>
+                  <td id="top-titlebar">
+                     <h2 id="title"></h2> 
+                  </td>
+               </tr>
+               <tr>
+                  <td>
+<script type="text/javascript">
+ui('Tutorials: Setting up VoIP', 'tutorials-voip-nav')
+</script>
+
+<h4>Aims</h4>
+
+<p>In this section I'm going to provide a link to explain how to set up PulseAudio and Skype to use the VoIP feature and then explain how
+VoIP works within IDJC.</p>
+
+<h4>Skype/PulseAudio configuration</h4>
+<p><a href="https://we.riseup.net/nikgnomic/ubuntu-studio-qjackctl-and-pulseaudio-for-idjc">External Link</a></p>
+
+<h4>Testing</h4>
+
+<p>Launch IDJC. Put your headphones on and select the Green Telephone icon to put IDJC into VoIP mode. In Skype click the
+<i>Make a test sound</i> button and listen for a sound effect.</p>
+
+<h4>The IDJC VoIP modes explained</h4>
+
+<ul>
+
+<li>
+<p><strong>Private conference (Red Telephone + No microphones engaged)</strong></p>
+<p>You are in a private conference with whoever is on the VoIP service and able to talk freely without
+interrupting the stream.
+You would typically use this mode when playing a song since the listeners can no longer hear you.
+What you can hear of the streamed audio is dictated by the mixback volume control
+that has the telephone icon above it.
+When you play jingles in this mode the jingles audio goes to the VoIP listeners
+and not to the stream. The right jingle could put them in the correct mood for going on air.</p>
+</li>
+
+<li>
+<p><strong>Away serving the listeners (Red Telephone + Any microphone)</strong></p>
+<p>This mode allows for the people who are on the VoIP service to keep up with your show and
+talk among themselves while you moderate your show. All active microphone audio will go to the stream
+and inactive microphones will just be muted leaving the VoIP users as part of your audience who can hear your show
+at the level determined by the mixback volume control.</p>
+
+<p>This mode is ideal for announcing the imminent switch to the next mode.</p>
+</li>
+
+<li>
+<p><strong>VoIP users free to speak to the audience (Green Telephone)</strong></p>
+<p>Self explanatory really. Note how the microphone buttons are not available in this mode.
+It is assumed you are taking responsibility for your show and being audible to all. Shutting off microphones
+in this mode would lead to confusion over who is able to speak and follow the conversation so all microphones are
+open. See the individual microphone disable feature in the preferences as the correct way to deal with unused
+microphone channels.</p>
+</li>
+
+</ul>
+
+<h4>Final advice</h4>
+<p>There are only effectively three VoIP modes but they should be practiced off-air until they become second nature.</p>
+                  </td>
+               </tr>
+            </table>
+     </td>
+ </tr>
+</table>
+</body>
+</html>
